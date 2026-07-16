@@ -2,8 +2,10 @@ import Fastify from "fastify";
 import cors from "@fastify/cors";
 import helmet from "@fastify/helmet";
 import rateLimit from "@fastify/rate-limit";
+
 import { productRoutes } from "./modules/products/product.routes";
 import { orderRoutes } from "./modules/orders/order.routes";
+import { customerRoutes } from "./modules/customers/customer.routes";
 
 export function buildApp() {
   const app = Fastify({
@@ -13,12 +15,15 @@ export function buildApp() {
     trustProxy: true
   });
 
+  app.register(helmet);
+
   app.register(cors, {
-  origin: [
-    "http://localhost:5173",
-    "http://127.0.0.1:5173"
-  ]
-});
+    origin: [
+      "http://localhost:5173",
+      "http://127.0.0.1:5173"
+    ]
+  });
+
   app.register(rateLimit, {
     max: 100,
     timeWindow: "1 minute"
@@ -43,6 +48,7 @@ export function buildApp() {
 
   app.register(productRoutes);
   app.register(orderRoutes);
+  app.register(customerRoutes);
 
   app.setNotFoundHandler(async (_request, reply) => {
     return reply.status(404).send({
