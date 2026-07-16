@@ -13,12 +13,12 @@ export function buildApp() {
     trustProxy: true
   });
 
-  app.register(helmet);
-
   app.register(cors, {
-    origin: false
-  });
-
+  origin: [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173"
+  ]
+});
   app.register(rateLimit, {
     max: 100,
     timeWindow: "1 minute"
