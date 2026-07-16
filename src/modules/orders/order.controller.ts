@@ -48,7 +48,7 @@ function identifyOrderError(message: string) {
   return {
     status: 500,
     code: "ORDER_CREATE_FAILED",
-    publicMessage: "Não foi possível criar o pedido."
+    publicMessage: "Não foi possível processar o pedido."
   };
 }
 
@@ -96,6 +96,30 @@ export class OrderController {
         error: {
           code: identified.code,
           message: identified.publicMessage
+        }
+      });
+    }
+  }
+
+  async list(
+    request: FastifyRequest,
+    reply: FastifyReply
+  ) {
+    try {
+      const orders = await orderService.list();
+
+      return reply.status(200).send({
+        success: true,
+        data: orders
+      });
+    } catch (error) {
+      request.log.error(error);
+
+      return reply.status(500).send({
+        success: false,
+        error: {
+          code: "ORDER_LIST_FAILED",
+          message: "Não foi possível carregar os pedidos."
         }
       });
     }

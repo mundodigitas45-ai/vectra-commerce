@@ -21,6 +21,19 @@ export class OrderRepository {
 
     return data;
   }
+
+  async list() {
+    const { data, error } = await supabase
+      .from("orders")
+      .select("*")
+      .limit(50);
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    return data ?? [];
+  }
 }
 
 export const orderRepository = new OrderRepository();
