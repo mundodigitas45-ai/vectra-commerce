@@ -1,0 +1,79 @@
+import {
+  Boxes,
+  ChartNoAxesCombined,
+  ClipboardList,
+  PackageSearch,
+  Settings,
+  ShoppingCart,
+  Truck,
+  Users
+} from "lucide-react";
+
+const menuItems = [
+  {
+    label: "Dashboard",
+    icon: ChartNoAxesCombined,
+    active: true
+  },
+  {
+    label: "Pedidos",
+    icon: ClipboardList
+  },
+  {
+    label: "Produtos",
+    icon: ShoppingCart
+  },
+  {
+    label: "Clientes",
+    icon: Users
+  },
+  {
+    label: "Estoque",
+    icon: Boxes
+  },
+  {
+    label: "Entregas",
+    icon: Truck
+  },
+  {
+    label: "Relatórios",
+    icon: PackageSearch
+  },
+  {
+    label: "Configurações",
+    icon: Settings
+  }
+];
+
+export function Sidebar() {
+  return (
+    <aside className="sidebar">
+      <div className="brand">
+        <div className="brand-mark">VC</div>
+
+        <div className="brand-text">
+          <strong>Vectra Commerce</strong>
+          <span>Admin</span>
+        </div>
+      </div>
+
+      <nav className="menu">
+        {menuItems.map(({ label, icon: Icon, active }) => (
+          <button
+            key={label}
+            className={`menu-item ${active ? "active" : ""}`}
+            type="button"
+          >
+            <Icon size={19} />
+            <span>{label}</span>
+          </button>
+        ))}
+      </nav>
+
+      <div className="sidebar-footer">
+        <strong>Miranda Express</strong>
+        <span>Mangueirão, Belém - PA</span>
+      </div>
+    </aside>
+  );
+}

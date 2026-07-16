@@ -1,0 +1,136 @@
+import { ClipboardList } from "lucide-react";
+
+const cards = [
+  {
+    label: "Pedidos hoje",
+    value: "0",
+    detail: "Nenhum pedido hoje"
+  },
+  {
+    label: "Receita hoje",
+    value: "R$ 0,00",
+    detail: "Atualizado agora"
+  },
+  {
+    label: "Produtos ativos",
+    value: "2",
+    detail: "67W e 120W"
+  },
+  {
+    label: "Clientes",
+    value: "0",
+    detail: "Clientes cadastrados"
+  }
+];
+
+export function Dashboard() {
+  return (
+    <>
+      <header className="topbar">
+        <div>
+          <p className="eyebrow">Visão geral</p>
+          <h1>Dashboard</h1>
+        </div>
+
+        <button className="primary-button" type="button">
+          Novo pedido
+        </button>
+      </header>
+
+      <section className="welcome-card">
+        <div>
+          <p className="eyebrow">Bom dia</p>
+
+          <h2>Bem-vindo ao Vectra Commerce</h2>
+
+          <p>
+            Acompanhe pedidos, produtos, clientes e estoque da
+            Miranda Express em um só lugar.
+          </p>
+        </div>
+
+        <div className="status-badge">
+          <span />
+          Sistema online
+        </div>
+      </section>
+
+      <section className="cards-grid">
+        {cards.map((card) => (
+          <article className="metric-card" key={card.label}>
+            <span>{card.label}</span>
+            <strong>{card.value}</strong>
+            <small>{card.detail}</small>
+          </article>
+        ))}
+      </section>
+
+      <section className="dashboard-grid">
+        <article className="panel">
+          <div className="panel-header">
+            <div>
+              <p className="eyebrow">Operação</p>
+              <h3>Pedidos recentes</h3>
+            </div>
+
+            <button className="text-button" type="button">
+              Ver todos
+            </button>
+          </div>
+
+          <div className="empty-state">
+            <ClipboardList size={42} />
+
+            <strong>Nenhum pedido recente</strong>
+
+            <p>
+              Os próximos pedidos aparecerão automaticamente aqui.
+            </p>
+          </div>
+        </article>
+
+        <article className="panel">
+          <div className="panel-header">
+            <div>
+              <p className="eyebrow">Inteligência</p>
+              <h3>Central de prioridades</h3>
+            </div>
+          </div>
+
+          <div className="priority-list">
+            <div className="priority-item">
+              <span className="priority-dot success" />
+
+              <div>
+                <strong>Estoque saudável</strong>
+                <p>Os dois carregadores possuem 10 unidades.</p>
+              </div>
+            </div>
+
+            <div className="priority-item">
+              <span className="priority-dot warning" />
+
+              <div>
+                <strong>Cadastre uma meta diária</strong>
+                <p>
+                  Defina uma meta para acompanhar o desempenho.
+                </p>
+              </div>
+            </div>
+
+            <div className="priority-item">
+              <span className="priority-dot info" />
+
+              <div>
+                <strong>WhatsApp ainda não conectado</strong>
+                <p>
+                  A integração será configurada nas próximas etapas.
+                </p>
+              </div>
+            </div>
+          </div>
+        </article>
+      </section>
+    </>
+  );
+}
