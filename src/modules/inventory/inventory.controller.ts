@@ -3,11 +3,11 @@ import type {
   FastifyRequest
 } from "fastify";
 import { ZodError } from "zod";
-import { customerService } from "./customer.service";
+import { inventoryService } from "./inventory.service";
 import {
-  createCustomerSchema,
-  type CreateCustomerInput
-} from "./customer.schemas";
+  createStockMovementSchema,
+  type CreateStockMovementInput
+} from "./inventory.schemas";
 
 function getErrorMessage(error: unknown) {
   if (error instanceof Error) {
@@ -23,20 +23,21 @@ function getErrorMessage(error: unknown) {
     return error.message;
   }
 
-  return "Não foi possível realizar a operação.";
+  return "Não foi possível realizar a movimentação.";
 }
 
-export class CustomerController {
-  async list(
+export class InventoryController {
+  async listMovements(
     request: FastifyRequest,
     reply: FastifyReply
   ) {
     try {
-      const customers = await customerService.list();
+      const movements =
+        await inventoryService.listMovements();
 
-      return reply.status(200).send({
+      return reply.send({
         success: true,
-        data: customers
+        data: movements
       });
     } catch (error) {
       request.log.error(error);
@@ -44,41 +45,41 @@ export class CustomerController {
       return reply.status(500).send({
         success: false,
         error: {
-          code: "CUSTOMER_LIST_FAILED",
+          code: "STOCK_MOVEMENT_LIST_FAILED",
           message: getErrorMessage(error)
         }
       });
     }
   }
 
-  async create(
+  async createMovement(
     request: FastifyRequest<{
-      Body: CreateCustomerInput;
+      Body: CreateStockMovementInput;
     }>,
     reply: FastifyReply
   ) {
     try {
-      const input = createCustomerSchema.parse(
-        request.body
-      );
+      const input =
+        createStockMovementSchema.parse(request.body);
 
-      const customer =
-        await customerService.create(input);
+      const result =
+        await inventoryService.createMovement(input);
 
       return reply.status(201).send({
         success: true,
-        message: "Cliente cadastrado com sucesso.",
-        data: customer
+        message:
+          "Movimentação de estoque registrada com sucesso.",
+        data: result
       });
     } catch (error) {
       if (error instanceof ZodError) {
         return reply.status(400).send({
           success: false,
           error: {
-            code: "INVALID_CUSTOMER_DATA",
+            code: "INVALID_STOCK_MOVEMENT",
             message:
               error.issues[0]?.message ??
-              "Os dados do cliente são inválidos.",
+              "Os dados da movimentação são inválidos.",
             issues: error.issues
           }
         });
@@ -88,19 +89,19 @@ export class CustomerController {
 
       request.log.error(error);
 
-      const statusCode = message.includes(
-        "Já existe um cliente"
-      )
-        ? 409
-        : 500;
+      const statusCode =
+        message.includes("Estoque insuficiente") ||
+        message.includes("unidades reservadas")
+          ? 409
+          : 500;
 
       return reply.status(statusCode).send({
         success: false,
         error: {
           code:
             statusCode === 409
-              ? "CUSTOMER_ALREADY_EXISTS"
-              : "CUSTOMER_CREATE_FAILED",
+              ? "INSUFFICIENT_STOCK"
+              : "STOCK_MOVEMENT_FAILED",
           message
         }
       });
@@ -108,5 +109,5 @@ export class CustomerController {
   }
 }
 
-export const customerController =
-  new CustomerController();
+export const inventoryController =
+  new InventoryController();

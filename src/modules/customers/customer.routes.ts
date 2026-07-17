@@ -8,4 +8,9 @@ export async function customerRoutes(
     "/api/v1/customers",
     customerController.list.bind(customerController)
   );
+
+  app.post(
+    "/api/v1/customers",
+    customerController.create.bind(customerController)
+  );
 }

@@ -3,11 +3,11 @@ import { orderRepository } from "./order.repository";
 
 export class OrderService {
   async create(input: CreateOrderInput) {
-    return await orderRepository.create(input);
+    return orderRepository.create(input);
   }
 
   async list() {
-    return await orderRepository.list();
+    return orderRepository.list();
   }
 }
 
