@@ -2,10 +2,8 @@
 import cors from "@fastify/cors";
 import helmet from "@fastify/helmet";
 import rateLimit from "@fastify/rate-limit";
-import { inventoryRoutes } from "./modules/inventory/inventory.routes";
 import { productRoutes } from "./modules/products/product.routes";
 import { orderRoutes } from "./modules/orders/order.routes";
-import { customerRoutes } from "./modules/customers/customer.routes";
 
 export function buildApp() {
   const app = Fastify({
@@ -15,17 +13,8 @@ export function buildApp() {
     trustProxy: true
   });
 
-  app.register(helmet);
-
   app.register(cors, {
     origin: [
-<<<<<<< HEAD
-      "http://localhost:5173",
-      "http://127.0.0.1:5173"
-    ]
-  });
-
-=======
       "https://commerce.vectradev.shop",
       "http://localhost:5173",
       "http://127.0.0.1:5173"
@@ -43,7 +32,6 @@ export function buildApp() {
 
   app.register(helmet);
 
->>>>>>> b6bc18b (fix: permitir dominio commerce no CORS da API)
   app.register(rateLimit, {
     max: 100,
     timeWindow: "1 minute"
@@ -68,8 +56,6 @@ export function buildApp() {
 
   app.register(productRoutes);
   app.register(orderRoutes);
-  app.register(customerRoutes);
-  app.register(inventoryRoutes);
 
   app.setNotFoundHandler(async (_request, reply) => {
     return reply.status(404).send({
