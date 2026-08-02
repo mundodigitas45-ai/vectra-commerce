@@ -36,6 +36,34 @@ export const createOrderSchema = z.object({
     .optional()
 });
 
+export const orderStatusSchema = z.enum([
+  "draft",
+  "pending_confirmation",
+  "reserved",
+  "confirmed",
+  "preparing",
+  "dispatched",
+  "delivered",
+  "cancelled"
+]);
+
+export const updateOrderStatusSchema = z.object({
+  status: orderStatusSchema,
+  reason: z.string().trim().max(300).nullable().optional()
+});
+
+export const orderIdParamsSchema = z.object({
+  orderId: z.string().uuid("O ID do pedido é inválido.")
+});
+
 export type CreateOrderInput = z.infer<
   typeof createOrderSchema
+>;
+
+export type OrderStatus = z.infer<
+  typeof orderStatusSchema
+>;
+
+export type UpdateOrderStatusInput = z.infer<
+  typeof updateOrderStatusSchema
 >;

@@ -5,13 +5,55 @@ import type {
 
 import {
   createOrderSchema,
-  type CreateOrderInput
+  orderIdParamsSchema,
+  updateOrderStatusSchema,
+  type CreateOrderInput,
+  type UpdateOrderStatusInput
 } from "./order.schemas";
 
 import { orderService } from "./order.service";
 
+function getErrorMessage(error: unknown) {
+  return error instanceof Error
+    ? error.message
+    : String(error);
+}
+
 function identifyOrderError(message: string) {
-  if (message.includes("DELIVERY_ZONE_NOT_FOUND")) {
+  if (message.includes("ORDER_NOT_FOUND")) {
+    return {
+      status: 404,
+      code: "ORDER_NOT_FOUND",
+      publicMessage: "Pedido não encontrado."
+    };
+  }
+
+  if (
+    message.includes("ORDER_RESERVATION_EXPIRED") ||
+    message.includes("NO_ACTIVE_RESERVATION")
+  ) {
+    return {
+      status: 409,
+      code: "ORDER_RESERVATION_EXPIRED",
+      publicMessage:
+        "A reserva deste pedido expirou. Cancele o pedido e crie um novo."
+    };
+  }
+
+  if (
+    message.includes("INVALID_STATUS_TRANSITION")
+  ) {
+    return {
+      status: 409,
+      code: "INVALID_STATUS_TRANSITION",
+      publicMessage:
+        "Essa mudança de status não é permitida."
+    };
+  }
+
+  if (
+    message.includes("DELIVERY_ZONE_NOT_FOUND")
+  ) {
     return {
       status: 422,
       code: "DELIVERY_ZONE_NOT_FOUND",
@@ -37,18 +79,22 @@ function identifyOrderError(message: string) {
     };
   }
 
-  if (message.includes("INVALID_PAYMENT_METHOD")) {
+  if (
+    message.includes("INVALID_PAYMENT_METHOD")
+  ) {
     return {
       status: 422,
       code: "INVALID_PAYMENT_METHOD",
-      publicMessage: "Forma de pagamento inválida."
+      publicMessage:
+        "Forma de pagamento inválida."
     };
   }
 
   return {
     status: 500,
-    code: "ORDER_CREATE_FAILED",
-    publicMessage: "Não foi possível criar o pedido."
+    code: "ORDER_OPERATION_FAILED",
+    publicMessage:
+      "Não foi possível concluir a operação do pedido."
   };
 }
 
@@ -59,21 +105,24 @@ export class OrderController {
     }>,
     reply: FastifyReply
   ) {
-    const parsed = createOrderSchema.safeParse(request.body);
+    const parsed =
+      createOrderSchema.safeParse(request.body);
 
     if (!parsed.success) {
       return reply.status(400).send({
         success: false,
         error: {
           code: "VALIDATION_ERROR",
-          message: "Os dados do pedido são inválidos.",
+          message:
+            "Os dados do pedido são inválidos.",
           details: parsed.error.flatten()
         }
       });
     }
 
     try {
-      const order = await orderService.create(parsed.data);
+      const order =
+        await orderService.create(parsed.data);
 
       return reply.status(201).send({
         success: true,
@@ -84,22 +133,126 @@ export class OrderController {
     } catch (error) {
       request.log.error(error);
 
-      const message =
-        error instanceof Error
-          ? error.message
-          : String(error);
+      const identified =
+        identifyOrderError(
+          getErrorMessage(error)
+        );
 
-      const identified = identifyOrderError(message);
+      return reply
+        .status(identified.status)
+        .send({
+          success: false,
+          error: {
+            code: identified.code,
+            message: identified.publicMessage
+          }
+        });
+    }
+  }
 
-      return reply.status(identified.status).send({
+  async list(
+    request: FastifyRequest,
+    reply: FastifyReply
+  ) {
+    try {
+      const orders = await orderService.list();
+
+      return reply.send({
+        success: true,
+        data: orders
+      });
+    } catch (error) {
+      request.log.error(error);
+
+      return reply.status(500).send({
         success: false,
         error: {
-          code: identified.code,
-          message: identified.publicMessage
+          code: "ORDER_LIST_FAILED",
+          message:
+            "Não foi possível carregar os pedidos."
         }
       });
     }
   }
+
+  async updateStatus(
+    request: FastifyRequest<{
+      Params: {
+        orderId: string;
+      };
+      Body: UpdateOrderStatusInput;
+    }>,
+    reply: FastifyReply
+  ) {
+    const parsedParams =
+      orderIdParamsSchema.safeParse(
+        request.params
+      );
+
+    if (!parsedParams.success) {
+      return reply.status(400).send({
+        success: false,
+        error: {
+          code: "INVALID_ORDER_ID",
+          message:
+            "O identificador do pedido é inválido.",
+          details:
+            parsedParams.error.flatten()
+        }
+      });
+    }
+
+    const parsedBody =
+      updateOrderStatusSchema.safeParse(
+        request.body
+      );
+
+    if (!parsedBody.success) {
+      return reply.status(400).send({
+        success: false,
+        error: {
+          code: "VALIDATION_ERROR",
+          message:
+            "O novo status do pedido é inválido.",
+          details:
+            parsedBody.error.flatten()
+        }
+      });
+    }
+
+    try {
+      const order =
+        await orderService.updateStatus(
+          parsedParams.data.orderId,
+          parsedBody.data
+        );
+
+      return reply.send({
+        success: true,
+        message:
+          "Status do pedido atualizado com sucesso.",
+        data: order
+      });
+    } catch (error) {
+      request.log.error(error);
+
+      const identified =
+        identifyOrderError(
+          getErrorMessage(error)
+        );
+
+      return reply
+        .status(identified.status)
+        .send({
+          success: false,
+          error: {
+            code: identified.code,
+            message: identified.publicMessage
+          }
+        });
+    }
+  }
 }
 
-export const orderController = new OrderController();
+export const orderController =
+  new OrderController();

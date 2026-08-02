@@ -4,8 +4,11 @@ import helmet from "@fastify/helmet";
 import rateLimit from "@fastify/rate-limit";
 import { productRoutes } from "./modules/products/product.routes";
 import { orderRoutes } from "./modules/orders/order.routes";
-
-export function buildApp() {
+import { settingsRoutes } from "./modules/settings/settings.routes";
+import { stockRoutes } from "./modules/stock/stock.routes";
+import { whatsappRoutes } from "./modules/whatsapp/whatsapp.routes";
+import { deliveryZoneRoutes } from "./modules/delivery-zones/delivery-zone.routes";
+export async function buildApp() {
   const app = Fastify({
     logger: {
       level: process.env.LOG_LEVEL ?? "info"
@@ -13,11 +16,57 @@ export function buildApp() {
     trustProxy: true
   });
 
-  app.register(helmet);
+ await app.register(cors, {
+  origin: (origin, callback) => {
+    const allowedOrigins = [
+      "https://painel.vectradev.shop",
+      "https://preview--huggable-cloud-play.lovable.app",
+      "http://localhost:5173",
+      "http://localhost:3000"
+    ];
 
-  app.register(cors, {
-    origin: false
-  });
+    const isLovablePreview =
+      typeof origin === "string" &&
+      /^https:\/\/(?:preview--)?[a-z0-9-]+\.lovable\.app$/i.test(origin);
+
+    const isAllowed =
+      !origin ||
+      allowedOrigins.includes(origin) ||
+      isLovablePreview;
+
+    if (isAllowed) {
+      callback(null, true);
+      return;
+    }
+
+    callback(
+      new Error(`CORS_ORIGIN_NOT_ALLOWED: ${origin}`),
+      false
+    );
+  },
+
+  methods: [
+    "GET",
+    "POST",
+    "PUT",
+    "PATCH",
+    "DELETE",
+    "OPTIONS"
+  ],
+
+  allowedHeaders: [
+    "Authorization",
+    "Content-Type",
+    "Accept",
+    "apikey",
+    "x-client-info"
+  ],
+
+  credentials: true,
+  maxAge: 86400
+});
+
+  await app.register
 
   app.register(rateLimit, {
     max: 100,
@@ -43,7 +92,10 @@ export function buildApp() {
 
   app.register(productRoutes);
   app.register(orderRoutes);
-
+  app.register(settingsRoutes);
+  app.register(stockRoutes);
+  app.register(whatsappRoutes);
+await app.register(deliveryZoneRoutes);
   app.setNotFoundHandler(async (_request, reply) => {
     return reply.status(404).send({
       success: false,
@@ -54,14 +106,27 @@ export function buildApp() {
     });
   });
 
-  app.setErrorHandler(async (error, request, reply) => {
+  app.setErrorHandler(async (error: any, request, reply) => {
     request.log.error(error);
 
-    return reply.status(500).send({
+    const statusCode =
+      error.statusCode &&
+      error.statusCode >= 400 &&
+      error.statusCode < 600
+        ? error.statusCode
+        : 500;
+
+    return reply.status(statusCode).send({
       success: false,
       error: {
-        code: "INTERNAL_SERVER_ERROR",
-        message: "Erro interno do servidor."
+        code:
+          statusCode === 500
+            ? "INTERNAL_SERVER_ERROR"
+            : "REQUEST_ERROR",
+        message:
+          statusCode === 500
+            ? "Erro interno do servidor."
+            : error.message
       }
     });
   });
