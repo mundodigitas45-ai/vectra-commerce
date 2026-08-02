@@ -1,4 +1,4 @@
-import Fastify from "fastify";
+﻿import Fastify from "fastify";
 import cors from "@fastify/cors";
 import helmet from "@fastify/helmet";
 import rateLimit from "@fastify/rate-limit";
@@ -14,11 +14,24 @@ export function buildApp() {
   });
 
   app.register(cors, {
-  origin: [
-    "http://localhost:5173",
-    "http://127.0.0.1:5173"
-  ]
-});
+    origin: [
+      "https://commerce.vectradev.shop",
+      "http://localhost:5173",
+      "http://127.0.0.1:5173"
+    ],
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: [
+      "Content-Type",
+      "Authorization",
+      "apikey",
+      "x-client-info",
+      "x-company-id"
+    ]
+  });
+
+  app.register(helmet);
+
   app.register(rateLimit, {
     max: 100,
     timeWindow: "1 minute"
