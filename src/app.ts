@@ -19,6 +19,7 @@ export async function buildApp() {
  await app.register(cors, {
   origin: (origin, callback) => {
     const allowedOrigins = [
+      "https://commerce.vectradev.shop",    
       "https://painel.vectradev.shop",
       "https://preview--huggable-cloud-play.lovable.app",
       "http://localhost:5173",
