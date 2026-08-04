@@ -11,3 +11,6 @@ test-order.json
 test-order.json
 test-order.json
 test-order.json
+
+# Workflows n8n com credenciais
+workflows/n8n-exports/*-private.json
