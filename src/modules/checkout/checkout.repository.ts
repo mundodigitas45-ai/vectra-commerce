@@ -4,6 +4,66 @@ const COMPANY_ID =
   process.env.COMPANY_ID ?? "e2e1f5bc-3f6c-4868-9d9c-5c8226df9b3d";
 
 export class CheckoutRepository {
+  async listPublicProducts() {
+    const { data: products, error: productError } = await supabase
+      .from("products")
+      .select(`
+        id,
+        name,
+        slug,
+        description,
+        sale_price,
+        image_url,
+        power_watts,
+        connector_type,
+        warranty_days,
+        is_active
+      `)
+      .eq("company_id", COMPANY_ID)
+      .eq("is_active", true)
+      .order("name", { ascending: true });
+
+    if (productError) {
+      throw productError;
+    }
+
+    const productIds = (products ?? []).map((product) => product.id);
+
+    if (productIds.length === 0) {
+      return [];
+    }
+
+    const { data: inventories, error: inventoryError } = await supabase
+      .from("inventories")
+      .select("product_id,physical_quantity,reserved_quantity")
+      .eq("company_id", COMPANY_ID)
+      .in("product_id", productIds);
+
+    if (inventoryError) {
+      throw inventoryError;
+    }
+
+    const availableByProduct = new Map<string, number>();
+
+    for (const inventory of inventories ?? []) {
+      const available = Math.max(
+        Number(inventory.physical_quantity ?? 0) -
+          Number(inventory.reserved_quantity ?? 0),
+        0
+      );
+
+      availableByProduct.set(
+        inventory.product_id,
+        (availableByProduct.get(inventory.product_id) ?? 0) + available
+      );
+    }
+
+    return (products ?? []).map((product) => ({
+      ...product,
+      available_quantity: availableByProduct.get(product.id) ?? 0
+    }));
+  }
+
   async findProductBySlug(slug: string) {
     const { data: product, error: productError } = await supabase
       .from("products")
