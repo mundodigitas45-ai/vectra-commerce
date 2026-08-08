@@ -76,6 +76,10 @@ export class CheckoutController {
     return reply
       .type("text/html; charset=utf-8")
       .header("Cache-Control", "no-store")
+      .header(
+        "Content-Security-Policy",
+        "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' https: data:; connect-src 'self'; base-uri 'self'; form-action 'self'"
+      )
       .send(renderCheckoutPage(parsed.data.slug));
   }
 
