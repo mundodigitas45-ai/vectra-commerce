@@ -4,6 +4,7 @@ import helmet from "@fastify/helmet";
 import rateLimit from "@fastify/rate-limit";
 import { productRoutes } from "./modules/products/product.routes";
 import { orderRoutes } from "./modules/orders/order.routes";
+import { checkoutRoutes } from "./modules/checkout/checkout.routes";
 
 export function buildApp() {
   const app = Fastify({
@@ -56,6 +57,7 @@ export function buildApp() {
 
   app.register(productRoutes);
   app.register(orderRoutes);
+  app.register(checkoutRoutes);
 
   app.setNotFoundHandler(async (_request, reply) => {
     return reply.status(404).send({
