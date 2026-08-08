@@ -42,6 +42,19 @@ function deduplicateDeliveryZones<
 }
 
 export class CheckoutService {
+  async getStorefrontData() {
+    const products = await checkoutRepository.listPublicProducts();
+
+    return {
+      products,
+      storefront: {
+        whatsapp_number: getPublicWhatsappNumber(),
+        delivery_today: true,
+        payment_on_delivery: true
+      }
+    };
+  }
+
   async getPageData(slug: string) {
     const product = await checkoutRepository.findProductBySlug(slug);
 
@@ -118,7 +131,6 @@ export class CheckoutService {
   }
 
   async createOrder(input: PublicCheckoutOrderInput) {
-    // Revalida preço, estoque e bairro imediatamente antes de criar a reserva.
     const firstItem = input.items[0];
 
     if (!firstItem || input.items.length !== 1) {
