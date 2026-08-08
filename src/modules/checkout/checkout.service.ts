@@ -15,6 +15,32 @@ function getPublicWhatsappNumber() {
   );
 }
 
+function normalizeLabel(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ");
+}
+
+function deduplicateDeliveryZones<
+  T extends { neighborhood?: string | null }
+>(zones: T[]) {
+  const seen = new Set<string>();
+
+  return zones.filter((zone) => {
+    const key = normalizeLabel(String(zone.neighborhood ?? ""));
+
+    if (!key || seen.has(key)) {
+      return false;
+    }
+
+    seen.add(key);
+    return true;
+  });
+}
+
 export class CheckoutService {
   async getPageData(slug: string) {
     const product = await checkoutRepository.findProductBySlug(slug);
@@ -23,7 +49,9 @@ export class CheckoutService {
       throw new Error("PRODUCT_NOT_FOUND");
     }
 
-    const deliveryZones = await checkoutRepository.listDeliveryZones();
+    const deliveryZones = deduplicateDeliveryZones(
+      await checkoutRepository.listDeliveryZones()
+    );
 
     return {
       product,
@@ -32,7 +60,8 @@ export class CheckoutService {
         payment_on_delivery: true,
         delivery_today: true,
         payment_methods: ["pix", "cash"] as const,
-        whatsapp_number: getPublicWhatsappNumber()
+        whatsapp_number: getPublicWhatsappNumber(),
+        logo_url: process.env.PUBLIC_LOGO_URL?.trim() || null
       }
     };
   }
