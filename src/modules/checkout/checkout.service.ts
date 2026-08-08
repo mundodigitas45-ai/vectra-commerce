@@ -6,6 +6,15 @@ import type {
 } from "./checkout.schemas";
 import { checkoutRepository } from "./checkout.repository";
 
+const DEFAULT_WHATSAPP_NUMBER = "5591920078425";
+
+function getPublicWhatsappNumber() {
+  return (
+    process.env.PUBLIC_WHATSAPP_NUMBER?.replace(/\D/g, "") ||
+    DEFAULT_WHATSAPP_NUMBER
+  );
+}
+
 export class CheckoutService {
   async getPageData(slug: string) {
     const product = await checkoutRepository.findProductBySlug(slug);
@@ -23,7 +32,7 @@ export class CheckoutService {
         payment_on_delivery: true,
         delivery_today: true,
         payment_methods: ["pix", "cash"] as const,
-        whatsapp_number: process.env.PUBLIC_WHATSAPP_NUMBER ?? null
+        whatsapp_number: getPublicWhatsappNumber()
       }
     };
   }
@@ -110,7 +119,7 @@ export class CheckoutService {
     return {
       order,
       quote,
-      whatsapp_number: process.env.PUBLIC_WHATSAPP_NUMBER ?? null
+      whatsapp_number: getPublicWhatsappNumber()
     };
   }
 }
