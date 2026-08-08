@@ -11,6 +11,7 @@ import {
 } from "./checkout.schemas";
 import { checkoutService } from "./checkout.service";
 import { renderCheckoutPage } from "./checkout.page";
+import { renderStorefrontPage } from "./storefront.page";
 
 function identifyCheckoutError(message: string) {
   if (message.includes("DELIVERY_ZONE_NOT_FOUND")) {
@@ -61,6 +62,29 @@ function identifyCheckoutError(message: string) {
 }
 
 export class CheckoutController {
+  async storefront(_request: FastifyRequest, reply: FastifyReply) {
+    return reply
+      .type("text/html; charset=utf-8")
+      .header("Cache-Control", "no-store")
+      .header(
+        "Content-Security-Policy",
+        "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' https: data:; connect-src 'self'; base-uri 'self'; form-action 'self'"
+      )
+      .send(renderStorefrontPage());
+  }
+
+  async getStorefrontData(
+    request: FastifyRequest,
+    reply: FastifyReply
+  ) {
+    try {
+      const data = await checkoutService.getStorefrontData();
+      return reply.send({ success: true, data });
+    } catch (error) {
+      return this.handleError(error, request, reply);
+    }
+  }
+
   async page(
     request: FastifyRequest<{ Params: { slug: string } }>,
     reply: FastifyReply
