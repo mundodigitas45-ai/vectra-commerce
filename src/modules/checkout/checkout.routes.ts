@@ -19,6 +19,14 @@ export async function checkoutRoutes(app: FastifyInstance) {
 
   app.post(
     "/api/v1/public/checkout/orders",
+    {
+      config: {
+        rateLimit: {
+          max: 10,
+          timeWindow: "1 minute"
+        }
+      }
+    },
     checkoutController.createOrder.bind(checkoutController)
   );
 }
