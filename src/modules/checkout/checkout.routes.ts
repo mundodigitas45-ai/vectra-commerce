@@ -3,6 +3,16 @@ import { checkoutController } from "./checkout.controller";
 
 export async function checkoutRoutes(app: FastifyInstance) {
   app.get(
+    "/loja",
+    checkoutController.storefront.bind(checkoutController)
+  );
+
+  app.get(
+    "/api/v1/public/storefront",
+    checkoutController.getStorefrontData.bind(checkoutController)
+  );
+
+  app.get(
     "/pedir/:slug",
     checkoutController.page.bind(checkoutController)
   );
