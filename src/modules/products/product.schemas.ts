@@ -70,6 +70,23 @@ export const createProductSchema = z.object({
     .optional()
 });
 
+export const importGoogleDriveMediaSchema = z.object({
+  file_id: z.string().trim().min(1, "Arquivo do Google Drive não informado."),
+  access_token: z.string().trim().min(1, "Token do Google Drive não informado."),
+  file_name: z.string().trim().min(1).max(255),
+  mime_type: z
+    .string()
+    .trim()
+    .refine(
+      (value) => value.startsWith("image/"),
+      "Nesta etapa, selecione um arquivo de imagem."
+    )
+});
+
 export type CreateProductInput = z.infer<
   typeof createProductSchema
+>;
+
+export type ImportGoogleDriveMediaInput = z.infer<
+  typeof importGoogleDriveMediaSchema
 >;
