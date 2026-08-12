@@ -14,13 +14,15 @@ export const createProductSchema = z.object({
   category_id: z.string().uuid().nullable().optional()
 });
 
+// Importador atual do Google Drive: imagens. A tabela product_media já nasce
+// preparada para vídeo, que será habilitado numa etapa separada sem mudar o modelo.
 export const importGoogleDriveMediaSchema = z.object({
   file_id: z.string().trim().min(1, "Arquivo do Google Drive não informado."),
   access_token: z.string().trim().min(1, "Token do Google Drive não informado."),
   file_name: z.string().trim().min(1).max(255),
   mime_type: z.string().trim().refine(
-    (value) => value.startsWith("image/") || value.startsWith("video/"),
-    "Selecione um arquivo de imagem ou vídeo válido."
+    (value) => value.startsWith("image/"),
+    "Nesta etapa, selecione um arquivo de imagem."
   ),
   alt_text: z.string().trim().max(255).nullable().optional(),
   is_primary: z.boolean().optional().default(false),
