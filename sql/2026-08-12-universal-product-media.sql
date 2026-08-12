@@ -28,10 +28,6 @@ create index if not exists product_media_product_idx
 create index if not exists product_media_company_idx
   on public.product_media(company_id, product_id);
 
-create unique index if not exists product_media_one_primary_per_product_idx
-  on public.product_media(product_id)
-  where is_primary = true and is_active = true;
-
 -- Mantém compatibilidade com sites/fluxos antigos que ainda leem products.image_url.
 create or replace function public.sync_product_primary_media()
 returns trigger
@@ -39,23 +35,12 @@ language plpgsql
 security definer
 set search_path = public
 as $$
+declare
+  target_product_id uuid;
 begin
-  if tg_op = 'DELETE' then
-    update public.products p
-       set image_url = (
-         select pm.public_url
-           from public.product_media pm
-          where pm.product_id = old.product_id
-            and pm.is_active = true
-            and pm.media_type = 'image'
-          order by pm.is_primary desc, pm.sort_order asc, pm.created_at asc
-          limit 1
-       )
-     where p.id = old.product_id;
-    return old;
-  end if;
+  target_product_id := case when tg_op = 'DELETE' then old.product_id else new.product_id end;
 
-  if new.is_primary = true and new.is_active = true then
+  if tg_op <> 'DELETE' and new.is_primary = true and new.is_active = true then
     update public.product_media
        set is_primary = false,
            updated_at = now()
@@ -68,16 +53,15 @@ begin
      set image_url = (
        select pm.public_url
          from public.product_media pm
-        where pm.product_id = new.product_id
+        where pm.product_id = target_product_id
           and pm.is_active = true
           and pm.media_type = 'image'
         order by pm.is_primary desc, pm.sort_order asc, pm.created_at asc
         limit 1
      )
-   where p.id = new.product_id;
+   where p.id = target_product_id;
 
-  new.updated_at = now();
-  return new;
+  return case when tg_op = 'DELETE' then old else new end;
 end;
 $$;
 
