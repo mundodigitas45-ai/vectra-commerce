@@ -1,11 +1,18 @@
+import { randomUUID } from "node:crypto";
 import { supabase } from "../../config/supabase";
-import { CreateProductInput } from "./product.schemas";
+import {
+  CreateProductInput,
+  ImportGoogleDriveMediaInput
+} from "./product.schemas";
 
 const COMPANY_ID =
   "e2e1f5bc-3f6c-4868-9d9c-5c8226df9b3d";
 
 const STORE_ID =
   "f4a134bb-00fc-4314-bcd5-9d5cd45f036d";
+
+const PRODUCT_MEDIA_BUCKET = "product-media";
+const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
 
 function createSlug(value: string) {
   return value
@@ -15,6 +22,16 @@ function createSlug(value: string) {
     .trim()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
+}
+
+function safeFileName(value: string) {
+  const normalized = value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9._-]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+
+  return normalized || "produto.jpg";
 }
 
 export class ProductService {
@@ -37,7 +54,118 @@ export class ProductService {
       throw error;
     }
 
-    return data;
+    const productIds = (data ?? [])
+      .map((item) => item.product_id)
+      .filter(Boolean);
+
+    if (productIds.length === 0) {
+      return data ?? [];
+    }
+
+    const { data: productMedia, error: mediaError } = await supabase
+      .from("products")
+      .select("id,image_url")
+      .in("id", productIds);
+
+    if (mediaError) {
+      throw mediaError;
+    }
+
+    const imageByProductId = new Map(
+      (productMedia ?? []).map((item) => [item.id, item.image_url])
+    );
+
+    return (data ?? []).map((item) => ({
+      ...item,
+      image_url: imageByProductId.get(item.product_id) ?? null
+    }));
+  }
+
+  async importGoogleDriveMedia(input: ImportGoogleDriveMediaInput) {
+    const driveResponse = await fetch(
+      `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(input.file_id)}?alt=media`,
+      {
+        headers: {
+          Authorization: `Bearer ${input.access_token}`
+        }
+      }
+    );
+
+    if (!driveResponse.ok) {
+      const body = await driveResponse.text().catch(() => "");
+      throw new Error(
+        `Não foi possível baixar a imagem do Google Drive (${driveResponse.status}). ${body}`.trim()
+      );
+    }
+
+    const contentType =
+      driveResponse.headers.get("content-type") ?? input.mime_type;
+
+    if (!contentType.startsWith("image/")) {
+      throw new Error("O arquivo selecionado não é uma imagem válida.");
+    }
+
+    const contentLength = Number(
+      driveResponse.headers.get("content-length") ?? 0
+    );
+
+    if (contentLength > MAX_IMAGE_BYTES) {
+      throw new Error("A imagem é maior que o limite de 20 MB.");
+    }
+
+    const arrayBuffer = await driveResponse.arrayBuffer();
+
+    if (arrayBuffer.byteLength > MAX_IMAGE_BYTES) {
+      throw new Error("A imagem é maior que o limite de 20 MB.");
+    }
+
+    const { error: bucketLookupError } = await supabase.storage
+      .getBucket(PRODUCT_MEDIA_BUCKET);
+
+    if (bucketLookupError) {
+      const { error: createBucketError } = await supabase.storage
+        .createBucket(PRODUCT_MEDIA_BUCKET, {
+          public: true,
+          fileSizeLimit: MAX_IMAGE_BYTES,
+          allowedMimeTypes: ["image/jpeg", "image/png", "image/webp", "image/gif"]
+        });
+
+      if (
+        createBucketError &&
+        !createBucketError.message.toLowerCase().includes("already exists")
+      ) {
+        throw createBucketError;
+      }
+    }
+
+    const fileName = `${randomUUID()}-${safeFileName(input.file_name)}`;
+    const storagePath = `products/${fileName}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from(PRODUCT_MEDIA_BUCKET)
+      .upload(storagePath, Buffer.from(arrayBuffer), {
+        contentType,
+        upsert: false,
+        cacheControl: "3600"
+      });
+
+    if (uploadError) {
+      throw uploadError;
+    }
+
+    const { data: publicUrlData } = supabase.storage
+      .from(PRODUCT_MEDIA_BUCKET)
+      .getPublicUrl(storagePath);
+
+    return {
+      source: "google_drive",
+      drive_file_id: input.file_id,
+      file_name: input.file_name,
+      mime_type: contentType,
+      storage_bucket: PRODUCT_MEDIA_BUCKET,
+      storage_path: storagePath,
+      public_url: publicUrlData.publicUrl
+    };
   }
 
   async create(input: CreateProductInput) {
