@@ -6,7 +6,9 @@ import { ZodError } from "zod";
 import { productService } from "./product.service";
 import {
   createProductSchema,
-  CreateProductInput
+  CreateProductInput,
+  importGoogleDriveMediaSchema,
+  ImportGoogleDriveMediaInput
 } from "./product.schemas";
 
 function getErrorMessage(error: unknown) {
@@ -40,6 +42,48 @@ export class ProductController {
       });
     } catch (error) {
       console.error("Erro ao listar produtos:", error);
+
+      return reply.status(500).send({
+        success: false,
+        error: {
+          message: getErrorMessage(error)
+        }
+      });
+    }
+  }
+
+  async importGoogleDriveMedia(
+    request: FastifyRequest<{
+      Body: ImportGoogleDriveMediaInput;
+    }>,
+    reply: FastifyReply
+  ) {
+    try {
+      const input = importGoogleDriveMediaSchema.parse(request.body);
+      const result = await productService.importGoogleDriveMedia(input);
+
+      return reply.status(201).send({
+        success: true,
+        message: "Imagem importada do Google Drive com sucesso.",
+        data: result
+      });
+    } catch (error) {
+      if (error instanceof ZodError) {
+        return reply.status(400).send({
+          success: false,
+          error: {
+            message:
+              error.issues[0]?.message ??
+              "Os dados da mídia são inválidos.",
+            issues: error.issues
+          }
+        });
+      }
+
+      console.error(
+        "Erro ao importar mídia do Google Drive:",
+        error
+      );
 
       return reply.status(500).send({
         success: false,
