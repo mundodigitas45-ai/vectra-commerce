@@ -10,6 +10,11 @@ export async function productRoutes(
   );
 
   app.post(
+    "/api/v1/product-media/google-drive/import",
+    productController.importGoogleDriveMedia.bind(productController)
+  );
+
+  app.post(
     "/api/v1/products",
     productController.create.bind(productController)
   );
