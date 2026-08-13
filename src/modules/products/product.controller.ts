@@ -3,10 +3,13 @@ import {
   FastifyRequest
 } from "fastify";
 import { ZodError } from "zod";
+import { supabase } from "../../config/supabase";
 import { productService } from "./product.service";
 import {
   createProductSchema,
-  CreateProductInput
+  CreateProductInput,
+  importGoogleDriveMediaSchema,
+  ImportGoogleDriveMediaInput
 } from "./product.schemas";
 
 function getErrorMessage(error: unknown) {
@@ -26,6 +29,40 @@ function getErrorMessage(error: unknown) {
   return "Não foi possível cadastrar o produto.";
 }
 
+async function requireAuthenticatedUser(
+  request: FastifyRequest,
+  reply: FastifyReply
+) {
+  const authorization = request.headers.authorization ?? "";
+  const match = authorization.match(/^Bearer\s+(.+)$/i);
+
+  if (!match?.[1]) {
+    reply.status(401).send({
+      success: false,
+      error: {
+        code: "UNAUTHORIZED",
+        message: "Sessão do painel não informada."
+      }
+    });
+    return null;
+  }
+
+  const { data, error } = await supabase.auth.getUser(match[1]);
+
+  if (error || !data.user) {
+    reply.status(401).send({
+      success: false,
+      error: {
+        code: "UNAUTHORIZED",
+        message: "Sessão do painel inválida ou expirada."
+      }
+    });
+    return null;
+  }
+
+  return data.user;
+}
+
 export class ProductController {
   async list(
     _request: FastifyRequest,
@@ -40,6 +77,54 @@ export class ProductController {
       });
     } catch (error) {
       console.error("Erro ao listar produtos:", error);
+
+      return reply.status(500).send({
+        success: false,
+        error: {
+          message: getErrorMessage(error)
+        }
+      });
+    }
+  }
+
+  async importGoogleDriveMedia(
+    request: FastifyRequest<{
+      Body: ImportGoogleDriveMediaInput;
+    }>,
+    reply: FastifyReply
+  ) {
+    try {
+      const user = await requireAuthenticatedUser(request, reply);
+      if (!user) return;
+
+      const input = importGoogleDriveMediaSchema.parse(request.body);
+      const result = await productService.importGoogleDriveMedia(input);
+
+      return reply.status(201).send({
+        success: true,
+        message: "Imagem importada do Google Drive com sucesso.",
+        data: {
+          ...result,
+          imported_by: user.id
+        }
+      });
+    } catch (error) {
+      if (error instanceof ZodError) {
+        return reply.status(400).send({
+          success: false,
+          error: {
+            message:
+              error.issues[0]?.message ??
+              "Os dados da mídia são inválidos.",
+            issues: error.issues
+          }
+        });
+      }
+
+      console.error(
+        "Erro ao importar mídia do Google Drive:",
+        error
+      );
 
       return reply.status(500).send({
         success: false,
