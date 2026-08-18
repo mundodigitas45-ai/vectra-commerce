@@ -1,5 +1,8 @@
 -- Central de Criativos IA - nucleo multiempresa
 -- Fase 1: campanhas, canais, jobs, ativos, aprovacoes e perfil de marca.
+-- A transacao garante rollback completo se qualquer etapa falhar.
+
+begin;
 
 create extension if not exists pgcrypto;
 
@@ -188,3 +191,5 @@ comment on table public.creative_campaigns is
   'Campanhas multiempresa da Central de Criativos IA.';
 comment on table public.creative_jobs is
   'Fila duravel para orquestracao pelo n8n e provedores de IA.';
+
+commit;
