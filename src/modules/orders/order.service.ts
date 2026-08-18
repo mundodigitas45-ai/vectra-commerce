@@ -60,6 +60,14 @@ export class OrderService {
     return orderRepository.list();
   }
 
+  async enqueueMetaPurchase(
+    orderId: string
+  ) {
+    return orderRepository.enqueueMetaPurchase(
+      orderId
+    );
+  }
+
   async updateStatus(
     orderId: string,
     input: UpdateOrderStatusInput

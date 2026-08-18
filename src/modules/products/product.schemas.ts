@@ -40,6 +40,109 @@ export const updateProductStatusSchema = z.object({
   is_active: z.boolean()
 });
 
+/* =========================================================
+ * BIBLIOTECA UNIVERSAL DE MIDIAS
+ * ========================================================= */
+
+const supportedProductMediaMimeTypes = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/gif",
+  "video/mp4",
+  "video/webm",
+  "video/quicktime"
+]);
+
+export const importGoogleDriveMediaSchema = z.object({
+  file_id: z
+    .string()
+    .trim()
+    .min(1, "Arquivo do Google Drive não informado."),
+
+  access_token: z
+    .string()
+    .trim()
+    .min(1, "Token do Google Drive não informado."),
+
+  file_name: z
+    .string()
+    .trim()
+    .min(1)
+    .max(255),
+
+  mime_type: z
+    .string()
+    .trim()
+    .transform((value) =>
+      value.split(";")[0].trim().toLowerCase()
+    )
+    .refine(
+      (value) =>
+        supportedProductMediaMimeTypes.has(value),
+      "Selecione uma imagem ou vídeo compatível."
+    ),
+
+  alt_text: z
+    .string()
+    .trim()
+    .max(255)
+    .nullable()
+    .optional(),
+
+  is_primary: z
+    .boolean()
+    .optional()
+    .default(false),
+
+  sort_order: z
+    .number()
+    .int()
+    .min(0)
+    .max(10000)
+    .optional()
+    .default(0)
+});
+
+export const updateProductMediaSchema = z
+  .object({
+    alt_text: z
+      .string()
+      .trim()
+      .max(255)
+      .nullable()
+      .optional(),
+
+    is_primary: z
+      .boolean()
+      .optional(),
+
+    sort_order: z
+      .number()
+      .int()
+      .min(0)
+      .max(10000)
+      .optional(),
+
+    is_active: z
+      .boolean()
+      .optional()
+  })
+  .refine(
+    (value) =>
+      Object.keys(value).length > 0,
+    {
+      message:
+        "Informe pelo menos um campo para atualizar a mídia."
+    }
+  );
+
+export type ImportGoogleDriveMediaInput =
+  z.infer<typeof importGoogleDriveMediaSchema>;
+
+export type UpdateProductMediaInput =
+  z.infer<typeof updateProductMediaSchema>;
+
 export type CreateProductInput =
   z.infer<typeof createProductSchema>;
 

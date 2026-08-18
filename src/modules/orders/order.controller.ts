@@ -155,7 +155,8 @@ export class OrderController {
     reply: FastifyReply
   ) {
     try {
-      const orders = await orderService.list();
+      const orders =
+        await orderService.list();
 
       return reply.send({
         success: true,
@@ -227,6 +228,122 @@ export class OrderController {
           parsedBody.data
         );
 
+      // =====================================================
+      // META PURCHASE OUTBOX
+      //
+      // Regra:
+      // - somente delivered
+      // - enqueue idempotente no banco
+      // - falha de tracking NUNCA desfaz a entrega
+      // - pedidos legados sem site_id são ignorados
+      // =====================================================
+
+      if (
+        parsedBody.data.status ===
+        "delivered"
+      ) {
+        try {
+          const outboxId =
+            await orderService
+              .enqueueMetaPurchase(
+                parsedParams.data.orderId
+              );
+
+          request.log.info(
+            {
+              orderId:
+                parsedParams.data.orderId,
+              outboxId
+            },
+            "Meta Purchase enfileirado."
+          );
+        } catch (trackingError) {
+          request.log.warn(
+            {
+              orderId:
+                parsedParams.data.orderId,
+              error:
+                getErrorMessage(
+                  trackingError
+                )
+            },
+            "Pedido entregue, mas o Meta Purchase não pôde ser enfileirado."
+          );
+        }
+      }
+
+      // =====================================================
+      // NOTIFICAÇÃO DE STATUS -> N8N
+      // A falha do webhook não pode impedir a atualização
+      // normal do pedido.
+      // =====================================================
+
+      const webhookUrl =
+        process.env.ORDER_STATUS_WEBHOOK_URL;
+
+      const status =
+        parsedBody.data.status;
+
+      const statusesToNotify = new Set([
+        "confirmed",
+        "preparing",
+        "dispatched",
+        "delivered"
+      ]);
+
+      if (
+        webhookUrl &&
+        statusesToNotify.has(status)
+      ) {
+        try {
+          const webhookResponse = await fetch(
+            webhookUrl,
+            {
+              method: "POST",
+              headers: {
+                "Content-Type":
+                  "application/json"
+              },
+              body: JSON.stringify({
+                order_id:
+                  parsedParams.data.orderId,
+                status,
+                reason:
+                  parsedBody.data.reason ?? ""
+              }),
+              signal:
+                AbortSignal.timeout(5000)
+            }
+          );
+
+          if (!webhookResponse.ok) {
+            request.log.warn(
+              {
+                orderId:
+                  parsedParams.data.orderId,
+                status,
+                webhookStatus:
+                  webhookResponse.status
+              },
+              "Webhook de status do pedido retornou erro."
+            );
+          }
+        } catch (webhookError) {
+          request.log.warn(
+            {
+              orderId:
+                parsedParams.data.orderId,
+              status,
+              error:
+                getErrorMessage(
+                  webhookError
+                )
+            },
+            "Não foi possível enviar a atualização de status ao n8n."
+          );
+        }
+      }
+
       return reply.send({
         success: true,
         message:
@@ -247,7 +364,8 @@ export class OrderController {
           success: false,
           error: {
             code: identified.code,
-            message: identified.publicMessage
+            message:
+              identified.publicMessage
           }
         });
     }

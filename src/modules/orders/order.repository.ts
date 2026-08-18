@@ -109,6 +109,30 @@ export class OrderRepository {
     return data;
   }
 
+  async enqueueMetaPurchase(
+    orderId: string
+  ) {
+    const { data, error } = await supabase.rpc(
+      "enqueue_meta_purchase",
+      {
+        p_order_id: orderId
+      }
+    );
+
+    if (error) {
+      const wrapped = new Error(
+        error.message
+      ) as Error & {
+        code?: string;
+      };
+
+      wrapped.code = error.code;
+      throw wrapped;
+    }
+
+    return data;
+  }
+
   async updateStatus(
     orderId: string,
     status: OrderStatus

@@ -8,6 +8,10 @@ import { settingsRoutes } from "./modules/settings/settings.routes";
 import { stockRoutes } from "./modules/stock/stock.routes";
 import { whatsappRoutes } from "./modules/whatsapp/whatsapp.routes";
 import { deliveryZoneRoutes } from "./modules/delivery-zones/delivery-zone.routes";
+import { companyContextRoutes } from "./modules/auth/company-context.routes";
+import { siteRoutes } from "./modules/sites/site.routes";
+import { publicSiteRoutes } from "./modules/sites/public-site.routes";
+import { siteIntegrationRoutes } from "./modules/site-integrations/site-integration.routes";
 export async function buildApp() {
   const app = Fastify({
     logger: {
@@ -21,6 +25,7 @@ export async function buildApp() {
     const allowedOrigins = [
       "https://commerce.vectradev.shop",    
       "https://painel.vectradev.shop",
+    "https://loja.vectradev.shop",
       "https://preview--huggable-cloud-play.lovable.app",
       "http://localhost:5173",
       "http://localhost:3000"
@@ -60,7 +65,8 @@ export async function buildApp() {
     "Content-Type",
     "Accept",
     "apikey",
-    "x-client-info"
+    "x-client-info",
+    "X-Company-Id"
   ],
 
   credentials: true,
@@ -96,7 +102,11 @@ export async function buildApp() {
   app.register(settingsRoutes);
   app.register(stockRoutes);
   app.register(whatsappRoutes);
-await app.register(deliveryZoneRoutes);
+  await app.register(deliveryZoneRoutes);
+  app.register(companyContextRoutes);
+  app.register(siteRoutes);
+  app.register(publicSiteRoutes);
+  app.register(siteIntegrationRoutes);
   app.setNotFoundHandler(async (_request, reply) => {
     return reply.status(404).send({
       success: false,
