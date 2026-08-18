@@ -22,6 +22,17 @@ export async function checkoutRoutes(app: FastifyInstance) {
     checkoutController.getPageData.bind(checkoutController)
   );
 
+  app.get(
+    "/api/v1/public/devices",
+    checkoutController.devices.bind(checkoutController)
+  );
+
+  app.get(
+    "/api/v1/public/compatibility",
+    checkoutController.compatibility.bind(checkoutController)
+  );
+
+
   app.post(
     "/api/v1/public/checkout/quote",
     checkoutController.quote.bind(checkoutController)

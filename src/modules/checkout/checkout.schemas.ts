@@ -27,7 +27,16 @@ const marketingSchema = z
   .optional();
 
 export const publicCheckoutOrderSchema = createOrderSchema.extend({
-  marketing: marketingSchema
+  marketing: marketingSchema,
+
+  tracking_consent: z
+    .enum([
+      "granted",
+      "denied",
+      "unknown"
+    ])
+    .optional()
+    .default("unknown")
 });
 
 export type CheckoutQuoteInput = z.infer<

@@ -14,6 +14,15 @@ import { renderCheckoutPage } from "./checkout.page";
 import { renderStorefrontPage } from "./storefront.page";
 
 function identifyCheckoutError(message: string) {
+  if (message.includes("SITE_NOT_FOUND")) {
+    return {
+      status: 404,
+      code: "SITE_NOT_FOUND",
+      publicMessage:
+        "Este site não está configurado para receber pedidos."
+    };
+  }
+
   if (message.includes("DELIVERY_ZONE_NOT_FOUND")) {
     return {
       status: 422,
@@ -68,7 +77,7 @@ export class CheckoutController {
       .header("Cache-Control", "no-store")
       .header(
         "Content-Security-Policy",
-        "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' https: data:; connect-src 'self'; base-uri 'self'; form-action 'self'"
+        "default-src 'self'; script-src 'self' 'unsafe-inline' https://connect.facebook.net; style-src 'self' 'unsafe-inline'; img-src 'self' https: data:; connect-src 'self' https://api.vectradev.shop https://www.facebook.com; base-uri 'self'; form-action 'self'"
       )
       .send(renderStorefrontPage());
   }
@@ -102,7 +111,7 @@ export class CheckoutController {
       .header("Cache-Control", "no-store")
       .header(
         "Content-Security-Policy",
-        "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' https: data:; connect-src 'self'; base-uri 'self'; form-action 'self'"
+        "default-src 'self'; script-src 'self' 'unsafe-inline' https://connect.facebook.net; style-src 'self' 'unsafe-inline'; img-src 'self' https: data:; connect-src 'self' https://api.vectradev.shop https://www.facebook.com; base-uri 'self'; form-action 'self'"
       )
       .send(renderCheckoutPage(parsed.data.slug));
   }
@@ -127,6 +136,67 @@ export class CheckoutController {
       return this.handleError(error, request, reply);
     }
   }
+
+  async devices(
+    request: FastifyRequest,
+    reply: FastifyReply
+  ) {
+    try {
+      const data = await checkoutService.listDevices();
+      return reply.send({
+        success: true,
+        data
+      });
+    } catch (error) {
+      return this.handleError(error, request, reply);
+    }
+  }
+
+  async compatibility(
+    request: FastifyRequest<{
+      Querystring: {
+        brand?: string;
+        model?: string;
+        slug?: string;
+      };
+    }>,
+    reply: FastifyReply
+  ) {
+    const brand = String(request.query.brand ?? "").trim();
+    const model = String(request.query.model ?? "").trim();
+    const slug = String(request.query.slug ?? "").trim();
+
+    if (!brand || !model) {
+      return reply.status(400).send({
+        success: false,
+        error: {
+          code: "VALIDATION_ERROR",
+          message: "Informe marca e modelo."
+        }
+      });
+    }
+
+    try {
+      const data = slug
+        ? await checkoutService.checkCompatibility({
+            brand,
+            model,
+            slug
+          })
+        : await checkoutService.recommendProductsForDevice({
+            brand,
+            model
+          });
+
+      return reply.send({
+        success: true,
+        data
+      });
+    } catch (error) {
+      return this.handleError(error, request, reply);
+    }
+  }
+
 
   async quote(
     request: FastifyRequest<{ Body: CheckoutQuoteInput }>,
@@ -171,7 +241,10 @@ export class CheckoutController {
     }
 
     try {
-      const data = await checkoutService.createOrder(parsed.data);
+      const data = await checkoutService.createOrder(
+        parsed.data,
+        request.hostname
+      );
       return reply.status(201).send({
         success: true,
         data,
