@@ -12,6 +12,7 @@ import { companyContextRoutes } from "./modules/auth/company-context.routes";
 import { siteRoutes } from "./modules/sites/site.routes";
 import { publicSiteRoutes } from "./modules/sites/public-site.routes";
 import { siteIntegrationRoutes } from "./modules/site-integrations/site-integration.routes";
+import { creativeCampaignRoutes } from "./modules/creative-campaigns/creative-campaign.routes";
 export async function buildApp() {
   const app = Fastify({
     logger: {
@@ -107,6 +108,7 @@ export async function buildApp() {
   app.register(siteRoutes);
   app.register(publicSiteRoutes);
   app.register(siteIntegrationRoutes);
+  app.register(creativeCampaignRoutes);
   app.setNotFoundHandler(async (_request, reply) => {
     return reply.status(404).send({
       success: false,
