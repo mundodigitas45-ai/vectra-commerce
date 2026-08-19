@@ -159,22 +159,20 @@ export class CreativeWorkerRepository {
         );
       }
 
-      const { error: assetError } = await supabase
-        .from("creative_assets")
-        .insert({
-          company_id: job.company_id,
-          campaign_id: job.campaign_id,
-          channel_id: channelOutput.channel_id,
-          job_id: job.id,
-          asset_type: "copy",
-          status: "review",
-          version: 1,
-          content: channelOutput.copy,
-          metadata: {
+      const { error: assetError } = await supabase.rpc(
+        "insert_creative_copy_asset_version",
+        {
+          p_company_id: job.company_id,
+          p_campaign_id: job.campaign_id,
+          p_channel_id: channelOutput.channel_id,
+          p_job_id: job.id,
+          p_content: channelOutput.copy,
+          p_metadata: {
             source: "creative_worker"
           },
-          created_by: job.created_by
-        });
+          p_created_by: job.created_by
+        }
+      );
 
       if (assetError) {
         throw repositoryError(assetError);
