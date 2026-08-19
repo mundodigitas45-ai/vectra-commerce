@@ -1,7 +1,8 @@
 import { supabase } from "../../config/supabase";
 import type {
   CreateCreativeCampaignInput,
-  RequestCreativeGenerationInput
+  RequestCreativeGenerationInput,
+  ReviewCreativeAssetInput
 } from "./creative-campaign.schemas";
 
 const campaignSelection =
@@ -45,6 +46,66 @@ export class CreativeCampaignRepository {
 
     if (error) throw wrappedError(error);
     return data;
+  }
+
+  async getReview(
+    companyId: string,
+    campaignId: string
+  ) {
+    const campaign = await this.getById(
+      companyId,
+      campaignId
+    );
+
+    if (!campaign) return null;
+
+    const [assetsResult, approvalsResult, jobsResult] =
+      await Promise.all([
+        supabase
+          .from("creative_assets")
+          .select(
+            "id, campaign_id, channel_id, job_id, asset_type, status, version, title, content, metadata, approved_by, approved_at, created_at, updated_at"
+          )
+          .eq("company_id", companyId)
+          .eq("campaign_id", campaignId)
+          .order("channel_id", { ascending: true })
+          .order("version", { ascending: false }),
+        supabase
+          .from("creative_approvals")
+          .select(
+            "id, campaign_id, channel_id, asset_id, decision, feedback, decided_by, decided_at"
+          )
+          .eq("company_id", companyId)
+          .eq("campaign_id", campaignId)
+          .order("decided_at", { ascending: false }),
+        supabase
+          .from("creative_jobs")
+          .select(
+            "id, status, output, error_code, error_message, created_at, completed_at"
+          )
+          .eq("company_id", companyId)
+          .eq("campaign_id", campaignId)
+          .order("created_at", { ascending: false })
+      ]);
+
+    if (assetsResult.error) {
+      throw wrappedError(assetsResult.error);
+    }
+
+    if (approvalsResult.error) {
+      throw wrappedError(approvalsResult.error);
+    }
+
+    if (jobsResult.error) {
+      throw wrappedError(jobsResult.error);
+    }
+
+    return {
+      campaign,
+      assets: assetsResult.data ?? [],
+      approvals: approvalsResult.data ?? [],
+      jobs: jobsResult.data ?? []
+    };
   }
 
   private async ensureProductAccess(
@@ -229,6 +290,29 @@ export class CreativeCampaignRepository {
       job,
       reused: false
     };
+  }
+
+  async reviewAsset(
+    companyId: string,
+    userId: string,
+    campaignId: string,
+    assetId: string,
+    input: ReviewCreativeAssetInput
+  ) {
+    const { data, error } = await supabase.rpc(
+      "review_creative_asset",
+      {
+        p_company_id: companyId,
+        p_campaign_id: campaignId,
+        p_asset_id: assetId,
+        p_decision: input.decision,
+        p_feedback: input.feedback ?? null,
+        p_decided_by: userId
+      }
+    );
+
+    if (error) throw wrappedError(error);
+    return data;
   }
 }
 
