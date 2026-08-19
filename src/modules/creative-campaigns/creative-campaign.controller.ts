@@ -5,13 +5,19 @@ import type {
 import {
   createCreativeCampaignSchema,
   requestCreativeGenerationSchema,
+  reviewCreativeAssetSchema,
   type CreateCreativeCampaignInput,
-  type RequestCreativeGenerationInput
+  type RequestCreativeGenerationInput,
+  type ReviewCreativeAssetInput
 } from "./creative-campaign.schemas";
 import { creativeCampaignService } from "./creative-campaign.service";
 
 interface CampaignParams {
   campaignId: string;
+}
+
+interface AssetParams extends CampaignParams {
+  assetId: string;
 }
 
 function canManageCreatives(
@@ -102,6 +108,146 @@ export class CreativeCampaignController {
           code: "CREATIVE_CAMPAIGN_LOAD_FAILED",
           message:
             "Não foi possível carregar a campanha."
+        }
+      });
+    }
+  }
+
+  async getReview(
+    request: FastifyRequest<{
+      Params: CampaignParams;
+    }>,
+    reply: FastifyReply
+  ) {
+    const context = request.authContext;
+    if (!context) return missingContext(reply);
+
+    try {
+      const review =
+        await creativeCampaignService.getReview(
+          context.companyId,
+          request.params.campaignId
+        );
+
+      if (!review) {
+        return reply.status(404).send({
+          success: false,
+          error: {
+            code: "CAMPAIGN_NOT_FOUND",
+            message: "Campanha não encontrada."
+          }
+        });
+      }
+
+      return reply.send({
+        success: true,
+        data: review
+      });
+    } catch (error) {
+      request.log.error(error);
+
+      return reply.status(500).send({
+        success: false,
+        error: {
+          code: "CREATIVE_REVIEW_LOAD_FAILED",
+          message:
+            "Não foi possível carregar a revisão da campanha."
+        }
+      });
+    }
+  }
+
+  async reviewAsset(
+    request: FastifyRequest<{
+      Params: AssetParams;
+      Body: ReviewCreativeAssetInput;
+    }>,
+    reply: FastifyReply
+  ) {
+    const context = request.authContext;
+    if (!context) return missingContext(reply);
+
+    if (!canManageCreatives(context.role)) {
+      return reply.status(403).send({
+        success: false,
+        error: {
+          code: "CREATIVE_MANAGE_FORBIDDEN",
+          message:
+            "Seu usuário não possui permissão para revisar criativos."
+        }
+      });
+    }
+
+    const parsed = reviewCreativeAssetSchema.safeParse(
+      request.body
+    );
+
+    if (!parsed.success) {
+      return reply.status(400).send({
+        success: false,
+        error: {
+          code: "VALIDATION_ERROR",
+          message:
+            "A decisão sobre o criativo é inválida.",
+          details: parsed.error.flatten()
+        }
+      });
+    }
+
+    try {
+      const result =
+        await creativeCampaignService.reviewAsset(
+          context.companyId,
+          context.userId,
+          request.params.campaignId,
+          request.params.assetId,
+          parsed.data
+        );
+
+      return reply.send({
+        success: true,
+        message:
+          parsed.data.decision === "approved"
+            ? "Versão aprovada com sucesso."
+            : parsed.data.decision ===
+                "changes_requested"
+              ? "Alterações solicitadas com sucesso."
+              : "Versão rejeitada com sucesso.",
+        data: result
+      });
+    } catch (error: any) {
+      request.log.error(error);
+
+      const message = String(error?.message ?? "");
+
+      if (message.includes("CREATIVE_ASSET_NOT_FOUND")) {
+        return reply.status(404).send({
+          success: false,
+          error: {
+            code: "CREATIVE_ASSET_NOT_FOUND",
+            message:
+              "A versão informada não pertence a esta campanha."
+          }
+        });
+      }
+
+      if (message.includes("CREATIVE_REVIEW_INVALID")) {
+        return reply.status(409).send({
+          success: false,
+          error: {
+            code: "CREATIVE_REVIEW_INVALID",
+            message:
+              "Esta decisão não pode ser aplicada à versão informada."
+          }
+        });
+      }
+
+      return reply.status(500).send({
+        success: false,
+        error: {
+          code: "CREATIVE_REVIEW_FAILED",
+          message:
+            "Não foi possível registrar a decisão."
         }
       });
     }
