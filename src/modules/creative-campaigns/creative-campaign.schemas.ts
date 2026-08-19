@@ -56,6 +56,34 @@ export const requestCreativeGenerationSchema = z.object({
     .default(["strategy", "copy"])
 });
 
+export const reviewCreativeAssetSchema = z
+  .object({
+    decision: z.enum([
+      "approved",
+      "changes_requested",
+      "rejected"
+    ]),
+    feedback: z
+      .string()
+      .trim()
+      .max(2000)
+      .nullable()
+      .optional()
+  })
+  .superRefine((input, context) => {
+    if (
+      input.decision === "changes_requested" &&
+      !input.feedback
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["feedback"],
+        message:
+          "Informe o que deve ser alterado nesta versão."
+      });
+    }
+  });
+
 export type CreativePlatform =
   z.infer<typeof creativePlatformSchema>;
 
@@ -64,3 +92,6 @@ export type CreateCreativeCampaignInput =
 
 export type RequestCreativeGenerationInput =
   z.infer<typeof requestCreativeGenerationSchema>;
+
+export type ReviewCreativeAssetInput =
+  z.infer<typeof reviewCreativeAssetSchema>;
