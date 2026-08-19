@@ -1,6 +1,7 @@
 import type {
   CreateCreativeCampaignInput,
-  RequestCreativeGenerationInput
+  RequestCreativeGenerationInput,
+  ReviewCreativeAssetInput
 } from "./creative-campaign.schemas";
 import { creativeCampaignRepository } from "./creative-campaign.repository";
 
@@ -16,6 +17,16 @@ export class CreativeCampaignService {
     campaignId: string
   ) {
     return creativeCampaignRepository.getById(
+      companyId,
+      campaignId
+    );
+  }
+
+  getReview(
+    companyId: string,
+    campaignId: string
+  ) {
+    return creativeCampaignRepository.getReview(
       companyId,
       campaignId
     );
@@ -43,6 +54,22 @@ export class CreativeCampaignService {
       companyId,
       userId,
       campaignId,
+      input
+    );
+  }
+
+  reviewAsset(
+    companyId: string,
+    userId: string,
+    campaignId: string,
+    assetId: string,
+    input: ReviewCreativeAssetInput
+  ) {
+    return creativeCampaignRepository.reviewAsset(
+      companyId,
+      userId,
+      campaignId,
+      assetId,
       input
     );
   }
