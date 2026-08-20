@@ -33,7 +33,9 @@ function workerFailure(
   const status =
     code === "CREATIVE_JOB_LEASE_INVALID"
       ? 409
-      : code === "CREATIVE_CHANNEL_NOT_FOUND"
+      : code === "CREATIVE_CHANNEL_NOT_FOUND" ||
+          code ===
+            "CREATIVE_REVISION_CHANNEL_MISMATCH"
         ? 400
         : 500;
 
