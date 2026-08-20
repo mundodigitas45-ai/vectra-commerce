@@ -211,7 +211,7 @@ export class CreativeCampaignController {
             ? "Versão aprovada com sucesso."
             : parsed.data.decision ===
                 "changes_requested"
-              ? "Alterações solicitadas com sucesso."
+              ? "Alterações solicitadas. Uma nova versão foi enviada para a fila."
               : "Versão rejeitada com sucesso.",
         data: result
       });
