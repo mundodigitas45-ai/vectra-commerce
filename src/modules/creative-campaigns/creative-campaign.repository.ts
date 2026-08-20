@@ -25,6 +25,7 @@ export class CreativeCampaignRepository {
       .from("creative_campaigns")
       .select(campaignSelection)
       .eq("company_id", companyId)
+      .neq("status", "archived")
       .order("created_at", {
         ascending: false
       });
