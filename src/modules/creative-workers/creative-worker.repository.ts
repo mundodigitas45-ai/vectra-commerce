@@ -16,6 +16,30 @@ function repositoryError(
   return result;
 }
 
+function readRevisionRequest(
+  value: unknown
+): Record<string, unknown> | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  const revision = (
+    value as Record<string, unknown>
+  ).revision_request;
+
+  if (
+    !revision ||
+    typeof revision !== "object" ||
+    typeof (
+      revision as Record<string, unknown>
+    ).channel_id !== "string"
+  ) {
+    return null;
+  }
+
+  return revision as Record<string, unknown>;
+}
+
 function domainError(
   code: string,
   message: string
@@ -95,7 +119,8 @@ export class CreativeWorkerRepository {
       job,
       campaign,
       product,
-      brand_profile: brandProfile
+      brand_profile: brandProfile,
+      revision_request: readRevisionRequest(job.input)
     };
   }
 
@@ -106,7 +131,7 @@ export class CreativeWorkerRepository {
     const { data, error } = await supabase
       .from("creative_jobs")
       .select(
-        "id, company_id, campaign_id, status, locked_by, created_by"
+        "id, company_id, campaign_id, status, locked_by, created_by, input"
       )
       .eq("id", jobId)
       .eq("status", "running")
@@ -133,6 +158,26 @@ export class CreativeWorkerRepository {
       jobId,
       input.worker_id
     );
+
+    const revision = readRevisionRequest(job.input);
+    const revisionChannelId =
+      typeof revision?.channel_id === "string"
+        ? revision.channel_id
+        : null;
+
+    if (
+      revisionChannelId &&
+      (
+        input.channels.length !== 1 ||
+        input.channels[0]?.channel_id !==
+          revisionChannelId
+      )
+    ) {
+      throw domainError(
+        "CREATIVE_REVISION_CHANNEL_MISMATCH",
+        "A revisão deve concluir somente o canal solicitado."
+      );
+    }
 
     for (const channelOutput of input.channels) {
       const { data: channel, error: channelError } =
