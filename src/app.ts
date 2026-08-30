@@ -15,6 +15,7 @@ import { siteIntegrationRoutes } from "./modules/site-integrations/site-integrat
 import { creativeCampaignRoutes } from "./modules/creative-campaigns/creative-campaign.routes";
 import { creativeWorkerRoutes } from "./modules/creative-workers/creative-worker.routes";
 import { creativeImageWorkerRoutes } from "./modules/creative-image-workers/creative-image-worker.routes";
+import { subscriptionRoutes } from "./modules/subscriptions/subscription.routes";
 export async function buildApp() {
   const app = Fastify({
     logger: {
@@ -113,6 +114,7 @@ export async function buildApp() {
   app.register(creativeCampaignRoutes);
   app.register(creativeWorkerRoutes);
   app.register(creativeImageWorkerRoutes);
+  app.register(subscriptionRoutes);
   app.setNotFoundHandler(async (_request, reply) => {
     return reply.status(404).send({
       success: false,
