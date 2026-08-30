@@ -16,6 +16,7 @@ import { creativeCampaignRoutes } from "./modules/creative-campaigns/creative-ca
 import { creativeWorkerRoutes } from "./modules/creative-workers/creative-worker.routes";
 import { creativeImageWorkerRoutes } from "./modules/creative-image-workers/creative-image-worker.routes";
 import { subscriptionRoutes } from "./modules/subscriptions/subscription.routes";
+import { onboardingRoutes } from "./modules/onboarding/onboarding.routes";
 export async function buildApp() {
   const app = Fastify({
     logger: {
@@ -115,6 +116,7 @@ export async function buildApp() {
   app.register(creativeWorkerRoutes);
   app.register(creativeImageWorkerRoutes);
   app.register(subscriptionRoutes);
+  app.register(onboardingRoutes);
   app.setNotFoundHandler(async (_request, reply) => {
     return reply.status(404).send({
       success: false,
