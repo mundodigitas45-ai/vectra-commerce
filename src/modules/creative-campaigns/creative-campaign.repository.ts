@@ -65,7 +65,7 @@ export class CreativeCampaignRepository {
         supabase
           .from("creative_assets")
           .select(
-            "id, campaign_id, channel_id, job_id, asset_type, status, version, title, content, metadata, approved_by, approved_at, created_at, updated_at"
+            "id, campaign_id, channel_id, job_id, asset_type, status, version, title, content, metadata, storage_bucket, storage_path, public_url, mime_type, format_key, width, height, approved_by, approved_at, created_at, updated_at"
           )
           .eq("company_id", companyId)
           .eq("campaign_id", campaignId)
