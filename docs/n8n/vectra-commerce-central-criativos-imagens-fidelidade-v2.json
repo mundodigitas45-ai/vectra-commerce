@@ -58,7 +58,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{JSON.stringify({worker_id:\"n8n-central-criativos-imagens-v1\",lease_seconds:1800})}}",
+        "jsonBody": "={{JSON.stringify({worker_id:\"n8n-central-criativos-imagens-fidelidade-v2\",lease_seconds:1800})}}",
         "options": {
           "response": {
             "response": {
@@ -144,7 +144,10 @@
           "name": "OpenAi account"
         }
       },
-      "onError": "continueErrorOutput"
+      "onError": "continueErrorOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 20000
     },
     {
       "parameters": {
@@ -307,7 +310,10 @@
           "name": "OpenAi account"
         }
       },
-      "onError": "continueErrorOutput"
+      "onError": "continueErrorOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 20000
     },
     {
       "parameters": {
