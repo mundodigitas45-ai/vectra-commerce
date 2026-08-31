@@ -1,0 +1,518 @@
+{
+  "updatedAt": "2026-08-30T03:43:10.000Z",
+  "createdAt": "2026-08-29T10:07:51.866Z",
+  "id": "VcCreativeImgV1",
+  "name": "Vectra Commerce - Central de Criativos Imagens v2 - Fidelidade",
+  "description": null,
+  "active": false,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "376f13d2-a92a-4008-84a1-de69bf538469",
+      "name": "Teste Manual",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -1000,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 1
+            }
+          ]
+        }
+      },
+      "id": "0e423610-7bbc-45d4-9ed2-946354b5840a",
+      "name": "Executar a Cada Minuto",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -1000,
+        -20
+      ],
+      "disabled": false
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.vectradev.shop/api/v1/internal/creative-image-jobs/claim",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-creative-worker-secret",
+              "value": "={{$env.CREATIVE_WORKER_SECRET}}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{JSON.stringify({worker_id:\"n8n-central-criativos-imagens-v1\",lease_seconds:1800})}}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          },
+          "timeout": 30000
+        }
+      },
+      "id": "bab3c7d2-9726-4c2f-8ad0-15894bf274a7",
+      "name": "API - Reservar Job de Imagem",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -760,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const envelope = $json;\n\nif (!envelope || envelope.success !== true) {\n  throw new Error(\n    'A API não confirmou a reserva do job visual.'\n  );\n}\n\nif (envelope.empty || !envelope.data) {\n  return [];\n}\n\nconst data = envelope.data;\n\nif (\n  !data.job?.id ||\n  !data.channel?.id ||\n  !data.format?.key ||\n  !data.approved_copy?.content\n) {\n  throw new Error(\n    'O job visual reservado está incompleto.'\n  );\n}\n\nreturn [{ json: data }];"
+      },
+      "id": "6c50ef46-bfca-421e-b46b-ae7054a7df6a",
+      "name": "Validar Job de Imagem",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -520,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $json;\nconst format = data.format || {};\nconst campaign = data.campaign || {};\nconst channel = data.channel || {};\nconst product = data.product || {};\nconst copy = data.approved_copy?.content || {};\n\nconst sizes = {\n  square: '1024x1024',\n  feed_portrait: '1024x1536',\n  story: '1024x1536',\n  landscape: '1536x1024'\n};\n\nconst formatNames = {\n  square: 'fotografia quadrada de produto',\n  feed_portrait: 'fotografia vertical de produto',\n  story: 'fotografia vertical para Story ou Reels',\n  landscape: 'fotografia horizontal de produto'\n};\n\nconst media = Array.isArray(data.product_media)\n  ? data.product_media\n  : [];\n\nconst referenceMedia = media\n  .filter(item =>\n    /^https:\\/\\/.+/i.test(\n      String(item.public_url || '').trim()\n    )\n  )\n  .filter(\n    (item, index, items) =>\n      items.findIndex(\n        candidate =>\n          String(candidate.public_url).trim() ===\n          String(item.public_url).trim()\n      ) === index\n  )\n  .slice(0, 5);\n\nconst referenceUrls = referenceMedia.map(\n  item => String(item.public_url).trim()\n);\n\nif (referenceUrls.length === 0) {\n  throw new Error(\n    'CREATIVE_IMAGE_REAL_REFERENCE_REQUIRED: ' +\n    'cadastre pelo menos uma foto real do produto.'\n  );\n}\n\nconst referenceInventory = referenceMedia.map(\n  (item, index) => ({\n    order: index + 1,\n    role:\n      index === 0\n        ? 'primary_identity_reference'\n        : 'supporting_inspection_reference',\n    url: String(item.public_url).trim(),\n    alt_text: String(item.alt_text || '').trim() || null,\n    is_primary: Boolean(item.is_primary)\n  })\n);\n\nconst prompt = [\n  'MODO OBRIGATÓRIO: FOTOGRAFIA PREMIUM DE PRODUTO REAL.',\n  'Edite e apresente o produto das fotografias fornecidas. Não crie um produto novo inspirado nelas.',\n  'A IMAGEM DE REFERÊNCIA 1 é a âncora principal de identidade e geometria.',\n  'As demais imagens servem somente para inspecionar laterais, portas, plugues, cabos, conectores, embalagem e acessórios.',\n  'Nunca misture produtos, variantes, ângulos ou acessórios de fotografias diferentes.',\n  'Preserve exatamente formato, proporção, cor, acabamento, textura, quantidade e tipo de portas, plugue, cabos, conectores, botões, marcações e acessórios reais.',\n  'Não invente, remova, duplique, mova ou redesenhe portas, conectores, cabos, plugues, telas, botões, selos, marcas ou acessórios.',\n  'Se uma característica não estiver comprovada nas referências, não a mostre.',\n  'Não altere logotipo, texto impresso, símbolos ou numeração existentes no próprio produto.',\n  'Não acrescente título, preço, CTA, selo, legenda, marca dágua ou qualquer texto publicitário.',\n  'Não use mãos, pessoas, objetos decorativos que encostem no produto ou elementos que escondam suas características.',\n  'Mantenha o produto inteiro dentro da área segura, sem cortes, deformações ou perspectiva impossível.',\n  'Faça apenas tratamento fotográfico profissional: recorte limpo, fundo premium, iluminação de estúdio, sombra fisicamente coerente, reflexos controlados, contraste e nitidez.',\n  'Fundo elegante, limpo e discreto em preto, grafite ou cinza premium, sem poluição visual.',\n  'O resultado deve parecer fotografia comercial real feita em estúdio, nunca ilustração, render 3D ou produto redesenhado.',\n  'Formato: ' + (formatNames[format.key] || format.key) + '.',\n  'Dimensão final esperada: ' + format.width + 'x' + format.height + '.',\n  product.name\n    ? 'Nome cadastrado do produto: ' + product.name + '.'\n    : '',\n  product.description\n    ? 'Descrição cadastrada, somente como contexto factual: ' +\n      product.description + '.'\n    : '',\n  copy.headline\n    ? 'Contexto comercial interno, não escrever na imagem: ' +\n      copy.headline + '.'\n    : '',\n  'Antes de finalizar, conte visualmente portas, plugues, cabos, conectores e acessórios e compare com todas as referências.',\n  'Se não for possível preservar o produto com fidelidade, não improvise.'\n].filter(Boolean).join('\\n');\n\nconst content = [\n  {\n    type: 'input_text',\n    text: prompt\n  },\n  ...referenceUrls.flatMap((url, index) => [\n    {\n      type: 'input_text',\n      text:\n        index === 0\n          ? 'IMAGEM DE REFERÊNCIA 1 - IDENTIDADE PRINCIPAL DO PRODUTO REAL'\n          : 'IMAGEM DE REFERÊNCIA ' +\n            (index + 1) +\n            ' - INSPEÇÃO COMPLEMENTAR DO MESMO PRODUTO'\n    },\n    {\n      type: 'input_image',\n      image_url: url,\n      detail: 'high'\n    }\n  ])\n];\n\nreturn [{\n  json: {\n    ...data,\n    worker_id:\n      'n8n-central-criativos-imagens-fidelidade-v2',\n    visual_mode: 'premium_product_photo',\n    fidelity_pipeline_version: '2.0',\n    image_prompt: prompt,\n    reference_urls: referenceUrls,\n    reference_inventory: referenceInventory,\n    openai_request: {\n      model: 'gpt-5.4',\n      input: [{\n        role: 'user',\n        content\n      }],\n      tools: [{\n        type: 'image_generation',\n        quality: 'high',\n        size:\n          sizes[format.key] ||\n          '1024x1024'\n      }]\n    }\n  }\n}];"
+      },
+      "id": "48d63972-3795-4af3-aedb-fbfbd48f8404",
+      "name": "Preparar Criativo Visual",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -280,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/responses",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{JSON.stringify($json.openai_request)}}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          },
+          "timeout": 600000
+        }
+      },
+      "id": "18a22e69-a137-4cfc-a758-f54d1315ec6c",
+      "name": "OpenAI - Gerar Imagem",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -20,
+        80
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "6YAdIl0TV2nxtvl5",
+          "name": "OpenAi account"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const source =\n  $('Preparar Criativo Visual').first().json;\n\nconst response = $json;\n\nconst calls = Array.isArray(response.output)\n  ? response.output.filter(\n      item =>\n        item &&\n        item.type === 'image_generation_call' &&\n        typeof item.result === 'string'\n    )\n  : [];\n\nif (!calls.length) {\n  const message =\n    response.error?.message ||\n    response.output_text ||\n    'A OpenAI não retornou uma imagem.';\n\n  throw new Error(message);\n}\n\nconst imageBase64 = calls[0].result;\n\nif (imageBase64.length < 100) {\n  throw new Error(\n    'A imagem retornada está vazia ou inválida.'\n  );\n}\n\nconst auditPrompt = [\n  'Atue como inspetor técnico visual rigoroso de produto para comércio eletrônico.',\n  'Compare as FOTOS REAIS DE REFERÊNCIA com a IMAGEM GERADA.',\n  'Reprove se existir qualquer alteração física ou visual relevante.',\n  'Verifique identidade do produto, formato, proporção, cor, acabamento, quantidade e tipo de portas, plugue, cabos, conectores, botões, marcações, embalagem e acessórios.',\n  'Reprove porta extra, porta ausente, conector errado, cabo duplicado, acessório inventado, logotipo alterado, texto publicitário, deformação, corte ou produto diferente.',\n  'Não premie beleza quando a fidelidade estiver errada.',\n  'Quando embalagem ou acessório não aparecer na imagem gerada, marque o check como true somente se nada tiver sido inventado e a ausência não alterar a identidade do produto.',\n  'Não reprove apenas porque uma embalagem opcional ficou fora da composição; reprove se ela aparecer alterada, inventada ou com marcações falsas.',\n  'passed só pode ser true quando score for pelo menos 92, critical_issues estiver vazio e todos os checks forem true.',\n  'Responda apenas JSON válido nesta estrutura:',\n  JSON.stringify({\n    passed: false,\n    score: 0,\n    critical_issues: [],\n    differences: [],\n    checks: {\n      same_product: false,\n      shape_and_proportion_match: false,\n      color_and_finish_match: false,\n      ports_match: false,\n      plug_match: false,\n      cables_and_connectors_match: false,\n      accessories_match: false,\n      branding_and_markings_match: false,\n      packaging_match: false,\n      no_added_advertising_text: false,\n      product_not_cropped_or_deformed: false,\n      photographic_realism: false\n    },\n    summary: ''\n  })\n].join('\\n');\n\nconst auditContent = [\n  {\n    type: 'input_text',\n    text: auditPrompt\n  },\n  ...source.reference_urls.flatMap(\n    (url, index) => [\n      {\n        type: 'input_text',\n        text:\n          'FOTO REAL DE REFERÊNCIA ' +\n          (index + 1)\n      },\n      {\n        type: 'input_image',\n        image_url: url,\n        detail: 'high'\n      }\n    ]\n  ),\n  {\n    type: 'input_text',\n    text:\n      'IMAGEM GERADA QUE DEVE SER AUDITADA'\n  },\n  {\n    type: 'input_image',\n    image_url:\n      'data:image/png;base64,' +\n      imageBase64,\n    detail: 'high'\n  }\n];\n\nreturn [{\n  json: {\n    ...source,\n    image_base64: imageBase64,\n    generation_response_id:\n      response.id || null,\n    generation_response_model:\n      response.model || 'gpt-5.4',\n    generation_usage:\n      response.usage || null,\n    fidelity_audit_request: {\n      model: 'gpt-5.4',\n      reasoning: {\n        effort: 'medium'\n      },\n      max_output_tokens: 2500,\n      text: {\n        format: {\n          type: 'json_object'\n        }\n      },\n      input: [{\n        role: 'user',\n        content: auditContent\n      }]\n    }\n  }\n}];"
+      },
+      "id": "a55cc6b8-5188-412b-9563-ab8fd61e8417",
+      "name": "Validar Imagem Gerada",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        80
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.vectradev.shop/api/v1/internal/creative-image-jobs/{{$json.job_id}}/complete",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-creative-worker-secret",
+              "value": "={{$env.CREATIVE_WORKER_SECRET}}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{JSON.stringify({worker_id:$json.worker_id,channel_id:$json.channel_id,format_key:$json.format_key,image_base64:$json.image_base64,prompt:$json.prompt,content:$json.content,metadata:$json.metadata,output:$json.output})}}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          },
+          "timeout": 30000
+        }
+      },
+      "id": "93589a59-151b-4128-9b5b-e64d8c81cc8d",
+      "name": "API - Concluir Imagem",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1020,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "let source = {};\n\ntry {\n  source =\n    $('Preparar Criativo Visual').first().json;\n} catch {}\n\nconst incoming = $json || {};\n\nconst error =\n  incoming.error ||\n  incoming.cause ||\n  incoming;\n\nconst message = String(\n  error.message ||\n  error.description ||\n  error.error?.message ||\n  'Falha não identificada na geração da imagem.'\n).slice(0, 2000);\n\nif (!source.job?.id) {\n  throw new Error(\n    'Não foi possível identificar o job visual com falha: ' +\n    message\n  );\n}\n\nconst isFidelityRejection =\n  message.includes(\n    'CREATIVE_IMAGE_FIDELITY_REJECTED'\n  ) ||\n  message.includes(\n    'CREATIVE_IMAGE_FIDELITY_AUDIT_INVALID'\n  );\n\nreturn [{\n  json: {\n    job_id: source.job.id,\n    worker_id:\n      source.worker_id ||\n      'n8n-central-criativos-imagens-fidelidade-v2',\n    error_code:\n      isFidelityRejection\n        ? 'CREATIVE_IMAGE_FIDELITY_REJECTED'\n        : 'OPENAI_IMAGE_GENERATION_FAILED',\n    error_message: message,\n    output: {\n      failed_at:\n        new Date().toISOString(),\n      format_key:\n        source.format?.key || null,\n      visual_mode:\n        source.visual_mode || null,\n      pipeline:\n        'premium-product-fidelity-v2',\n      details: message\n    }\n  }\n}];"
+      },
+      "id": "59d6b925-1ba0-436f-9b55-786570c84456",
+      "name": "Preparar Falha de Imagem",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        760,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.vectradev.shop/api/v1/internal/creative-image-jobs/{{$json.job_id}}/fail",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-creative-worker-secret",
+              "value": "={{$env.CREATIVE_WORKER_SECRET}}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{JSON.stringify({worker_id:$json.worker_id,error_code:$json.error_code,error_message:$json.error_message,output:$json.output})}}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          },
+          "timeout": 30000
+        }
+      },
+      "id": "4b0c0b95-bdcd-4103-93c5-d49a20889f83",
+      "name": "API - Registrar Falha de Imagem",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1020,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "central-criativos-imagens-51da05ae5bae5cd3a9e25e36237ec91a",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "18e8b27b-61e1-41ab-a1c6-943e8b9355c7",
+      "name": "Webhook Secreto de Teste",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -1000,
+        380
+      ],
+      "webhookId": "c07ae6d1-b700-49e4-ae97-a5e5891aa504"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/responses",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{JSON.stringify($json.fidelity_audit_request)}}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          },
+          "timeout": 600000
+        }
+      },
+      "id": "22f6dcf7-c1f4-4f0e-97f1-203df542bf41",
+      "name": "OpenAI - Auditar Fidelidade",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        500,
+        80
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "6YAdIl0TV2nxtvl5",
+          "name": "OpenAi account"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const source =\n  $('Validar Imagem Gerada').first().json;\n\nconst response = $json;\n\nfunction extractText(value) {\n  if (\n    typeof value?.output_text === 'string' &&\n    value.output_text.trim()\n  ) {\n    return value.output_text.trim();\n  }\n\n  if (Array.isArray(value?.output)) {\n    return value.output\n      .flatMap(item =>\n        Array.isArray(item?.content)\n          ? item.content\n          : []\n      )\n      .map(item =>\n        typeof item?.text === 'string'\n          ? item.text\n          : ''\n      )\n      .filter(Boolean)\n      .join('')\n      .trim();\n  }\n\n  return '';\n}\n\nlet audit;\n\ntry {\n  audit = JSON.parse(extractText(response));\n} catch {\n  throw new Error(\n    'CREATIVE_IMAGE_FIDELITY_AUDIT_INVALID: ' +\n    'a auditoria visual não retornou JSON válido.'\n  );\n}\n\nconst score = Number(audit.score || 0);\n\nconst criticalIssues = Array.isArray(\n  audit.critical_issues\n)\n  ? audit.critical_issues\n      .map(item => String(item))\n      .filter(Boolean)\n  : [];\n\nconst differences = Array.isArray(\n  audit.differences\n)\n  ? audit.differences\n      .map(item => String(item))\n      .filter(Boolean)\n  : [];\n\nconst checks =\n  audit.checks &&\n  typeof audit.checks === 'object' &&\n  !Array.isArray(audit.checks)\n    ? audit.checks\n    : {};\n\nconst requiredChecks = [\n  'same_product',\n  'shape_and_proportion_match',\n  'color_and_finish_match',\n  'ports_match',\n  'plug_match',\n  'cables_and_connectors_match',\n  'accessories_match',\n  'branding_and_markings_match',\n  'packaging_match',\n  'no_added_advertising_text',\n  'product_not_cropped_or_deformed',\n  'photographic_realism'\n];\n\nconst failedChecks = requiredChecks.filter(\n  key => checks[key] !== true\n);\n\nconst passed =\n  audit.passed === true &&\n  score >= 92 &&\n  criticalIssues.length === 0 &&\n  failedChecks.length === 0;\n\nconst normalizedAudit = {\n  passed,\n  score,\n  critical_issues: criticalIssues,\n  differences,\n  failed_checks: failedChecks,\n  checks,\n  summary:\n    typeof audit.summary === 'string'\n      ? audit.summary.trim()\n      : '',\n  audit_response_id:\n    response.id || null,\n  audit_model:\n    response.model || 'gpt-5.4',\n  audited_at:\n    new Date().toISOString()\n};\n\nif (!passed) {\n  const details = [\n    normalizedAudit.summary,\n    criticalIssues.join('; '),\n    failedChecks.length\n      ? 'Falhas: ' + failedChecks.join(', ')\n      : '',\n    differences.join('; ')\n  ]\n    .filter(Boolean)\n    .join(' | ')\n    .slice(0, 1600);\n\n  throw new Error(\n    'CREATIVE_IMAGE_FIDELITY_REJECTED: ' +\n    (details ||\n      'a imagem não atingiu a fidelidade mínima.')\n  );\n}\n\nreturn [{\n  json: {\n    job_id: source.job.id,\n    worker_id: source.worker_id,\n    channel_id: source.channel.id,\n    format_key: source.format.key,\n    image_base64: source.image_base64,\n    prompt: source.image_prompt,\n    content: {\n      headline:\n        source.approved_copy?.content?.headline ||\n        null,\n      primary_text:\n        source.approved_copy?.content\n          ?.primary_text || null,\n      description:\n        source.approved_copy?.content\n          ?.description || null,\n      cta:\n        source.approved_copy?.content?.cta ||\n        null\n    },\n    metadata: {\n      generator:\n        'openai-responses-image-generation',\n      pipeline:\n        'premium-product-fidelity-v2',\n      visual_mode:\n        source.visual_mode,\n      generation_response_id:\n        source.generation_response_id,\n      generation_response_model:\n        source.generation_response_model,\n      generation_usage:\n        source.generation_usage || null,\n      fidelity_audit_usage:\n        response.usage || null,\n      reference_urls:\n        source.reference_urls,\n      reference_inventory:\n        source.reference_inventory,\n      requested_width:\n        source.format.width,\n      requested_height:\n        source.format.height,\n      fidelity_validation:\n        normalizedAudit\n    },\n    output: {\n      openai_response_id:\n        source.generation_response_id,\n      fidelity_audit_response_id:\n        response.id || null,\n      fidelity_score:\n        score,\n      generated_at:\n        new Date().toISOString()\n    }\n  }\n}];"
+      },
+      "id": "32523186-4b71-41e5-a127-74267a11cd31",
+      "name": "Validar Fidelidade Visual",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        760,
+        80
+      ],
+      "onError": "continueErrorOutput"
+    }
+  ],
+  "connections": {
+    "Teste Manual": {
+      "main": [
+        [
+          {
+            "node": "API - Reservar Job de Imagem",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Executar a Cada Minuto": {
+      "main": [
+        [
+          {
+            "node": "API - Reservar Job de Imagem",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "API - Reservar Job de Imagem": {
+      "main": [
+        [
+          {
+            "node": "Validar Job de Imagem",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validar Job de Imagem": {
+      "main": [
+        [
+          {
+            "node": "Preparar Criativo Visual",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar Criativo Visual": {
+      "main": [
+        [
+          {
+            "node": "OpenAI - Gerar Imagem",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI - Gerar Imagem": {
+      "main": [
+        [
+          {
+            "node": "Validar Imagem Gerada",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Preparar Falha de Imagem",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validar Imagem Gerada": {
+      "main": [
+        [
+          {
+            "node": "OpenAI - Auditar Fidelidade",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Preparar Falha de Imagem",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar Falha de Imagem": {
+      "main": [
+        [
+          {
+            "node": "API - Registrar Falha de Imagem",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook Secreto de Teste": {
+      "main": [
+        [
+          {
+            "node": "API - Reservar Job de Imagem",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI - Auditar Fidelidade": {
+      "main": [
+        [
+          {
+            "node": "Validar Fidelidade Visual",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Preparar Falha de Imagem",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validar Fidelidade Visual": {
+      "main": [
+        [
+          {
+            "node": "API - Concluir Imagem",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Preparar Falha de Imagem",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "timezone": "America/Belem"
+  },
+  "staticData": {
+    "node:Executar a Cada Minuto": {
+      "recurrenceRules": []
+    }
+  },
+  "meta": null,
+  "pinData": {},
+  "versionId": "7b0f4c2e-237b-4252-b3aa-464f3ca9b2d0",
+  "activeVersionId": "7b0f4c2e-237b-4252-b3aa-464f3ca9b2d0",
+  "versionCounter": 14,
+  "triggerCount": 2,
+  "tags": [],
+  "shared": [
+    {
+      "updatedAt": "2026-08-29T10:07:51.870Z",
+      "createdAt": "2026-08-29T10:07:51.870Z",
+      "role": "workflow:owner",
+      "workflowId": "VcCreativeImgV1",
+      "projectId": "aDMHvq09zgAd6yCh",
+      "project": {
+        "updatedAt": "2026-03-05T00:58:00.390Z",
+        "createdAt": "2026-03-04T22:59:05.239Z",
+        "id": "aDMHvq09zgAd6yCh",
+        "name": "ANDERSON vectra  <cristec27@gmail.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "creatorId": "d97ee129-f45d-452a-b3c8-d9005f2145bf"
+      }
+    }
+  ],
+  "versionMetadata": {
+    "name": "Version 7b0f4c2e",
+    "description": ""
+  }
+}
