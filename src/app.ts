@@ -13,6 +13,7 @@ import { siteRoutes } from "./modules/sites/site.routes";
 import { publicSiteRoutes } from "./modules/sites/public-site.routes";
 import { siteIntegrationRoutes } from "./modules/site-integrations/site-integration.routes";
 import { crmRoutes } from "./modules/crm/crm.routes";
+import { companyIntegrationRoutes } from "./modules/company-integrations/company-integration.routes";
 import { siteAnalyticsRoutes } from "./modules/site-analytics/site-analytics.routes";
 import { creativeCampaignRoutes } from "./modules/creative-campaigns/creative-campaign.routes";
 import { creativeWorkerRoutes } from "./modules/creative-workers/creative-worker.routes";
@@ -113,6 +114,7 @@ export async function buildApp() {
   app.register(publicSiteRoutes);
   app.register(siteIntegrationRoutes);
   app.register(crmRoutes);
+  app.register(companyIntegrationRoutes);
   app.register(siteAnalyticsRoutes);
   app.register(creativeCampaignRoutes);
   app.register(creativeWorkerRoutes);
