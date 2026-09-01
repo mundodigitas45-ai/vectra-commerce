@@ -1,18 +1,13 @@
-import type {
-  FastifyReply,
-  FastifyRequest
-} from "fastify";
+import type { FastifyReply, FastifyRequest } from "fastify";
 
 import {
   companyAiResponsesSchema,
   connectOpenAiSchema,
   type CompanyAiResponsesInput,
-  type ConnectOpenAiInput
+  type ConnectOpenAiInput,
 } from "./company-integration.schemas";
 
-import {
-  companyIntegrationService
-} from "./company-integration.service";
+import { companyIntegrationService } from "./company-integration.service";
 
 type CodedError = Error & {
   code?: string;
@@ -20,14 +15,10 @@ type CodedError = Error & {
 };
 
 function canManage(role: string) {
-  return role === "owner" ||
-    role === "admin";
+  return role === "owner" || role === "admin";
 }
 
-function contextOrReply(
-  request: FastifyRequest,
-  reply: FastifyReply
-) {
+function contextOrReply(request: FastifyRequest, reply: FastifyReply) {
   if (request.authContext) {
     return request.authContext;
   }
@@ -36,87 +27,67 @@ function contextOrReply(
     success: false,
     error: {
       code: "AUTH_REQUIRED",
-      message:
-        "É necessário entrar novamente no painel."
-    }
+      message: "É necessário entrar novamente no painel.",
+    },
   });
 
   return null;
 }
 
-function errorResponse(
-  error: unknown,
-  reply: FastifyReply
-) {
-  const typed =
-    error as CodedError;
+function errorResponse(error: unknown, reply: FastifyReply) {
+  const typed = error as CodedError;
 
-  const code =
-    typed?.code ??
-    "COMPANY_INTEGRATION_FAILED";
+  const code = typed?.code ?? "COMPANY_INTEGRATION_FAILED";
 
-  const knownStatuses:
-    Record<string, number> = {
-      ACTIVE_SUBSCRIPTION_REQUIRED: 402,
-      INTEGRATION_FEATURE_NOT_INCLUDED: 403,
-      COMPANY_INTEGRATION_NOT_FOUND: 404,
-      OPENAI_NOT_CONFIGURED: 404,
-      OPENAI_KEY_INVALID: 400,
-      OPENAI_KEY_FORBIDDEN: 400,
-      OPENAI_RATE_LIMITED: 429,
-      OPENAI_VALIDATION_TIMEOUT: 504,
-      OPENAI_VALIDATION_FAILED: 502
-    };
+  const knownStatuses: Record<string, number> = {
+    ACTIVE_SUBSCRIPTION_REQUIRED: 402,
+    INTEGRATION_FEATURE_NOT_INCLUDED: 403,
+    COMPANY_INTEGRATION_NOT_FOUND: 404,
+    OPENAI_NOT_CONFIGURED: 404,
+    OPENAI_NOT_READY: 409,
+    OPENAI_CREDIT_REQUIRED: 402,
+    OPENAI_KEY_INVALID: 400,
+    OPENAI_KEY_FORBIDDEN: 400,
+    OPENAI_RATE_LIMITED: 429,
+    OPENAI_VALIDATION_TIMEOUT: 504,
+    OPENAI_REQUEST_TIMEOUT: 504,
+    OPENAI_VALIDATION_FAILED: 502,
+    OPENAI_READINESS_FAILED: 502,
+  };
 
-  const status =
-    knownStatuses[code] ??
-    typed?.httpStatus ??
-    500;
+  const status = knownStatuses[code] ?? typed?.httpStatus ?? 500;
 
   const safeMessage =
     status >= 500
       ? "Não foi possível concluir a integração."
-      : typed?.message ??
-        "Não foi possível concluir a integração.";
+      : (typed?.message ?? "Não foi possível concluir a integração.");
 
   return reply.status(status).send({
     success: false,
     error: {
       code,
-      message: safeMessage
-    }
+      message: safeMessage,
+    },
   });
 }
 
 export class CompanyIntegrationController {
-  async list(
-    request: FastifyRequest,
-    reply: FastifyReply
-  ) {
-    const context =
-      contextOrReply(request, reply);
+  async list(request: FastifyRequest, reply: FastifyReply) {
+    const context = contextOrReply(request, reply);
 
     if (!context) return;
 
     try {
-      const data =
-        await companyIntegrationService
-          .list(context.companyId);
+      const data = await companyIntegrationService.list(context.companyId);
 
       return reply.send({
         success: true,
-        data
+        data,
       });
     } catch (error: unknown) {
-      request.log.error(
-        {},
-        "Falha ao listar integrações da empresa."
-      );
+      request.log.error({}, "Falha ao listar integrações da empresa.");
 
-      return errorResponse(
-        error,
-        reply
-      );
+      return errorResponse(error, reply);
     }
   }
 
@@ -124,10 +95,9 @@ export class CompanyIntegrationController {
     request: FastifyRequest<{
       Body: ConnectOpenAiInput;
     }>,
-    reply: FastifyReply
+    reply: FastifyReply,
   ) {
-    const context =
-      contextOrReply(request, reply);
+    const context = contextOrReply(request, reply);
 
     if (!context) return;
 
@@ -135,46 +105,37 @@ export class CompanyIntegrationController {
       return reply.status(403).send({
         success: false,
         error: {
-          code:
-            "INTEGRATION_MANAGE_FORBIDDEN",
+          code: "INTEGRATION_MANAGE_FORBIDDEN",
           message:
-            "Seu usuário não possui permissão para gerenciar integrações."
-        }
+            "Seu usuário não possui permissão para gerenciar integrações.",
+        },
       });
     }
 
-    const parsed =
-      connectOpenAiSchema.safeParse(
-        request.body
-      );
+    const parsed = connectOpenAiSchema.safeParse(request.body);
 
     if (!parsed.success) {
       return reply.status(400).send({
         success: false,
         error: {
           code: "VALIDATION_ERROR",
-          message:
-            "A configuração OpenAI é inválida.",
-          details:
-            parsed.error.flatten()
-        }
+          message: "A configuração OpenAI é inválida.",
+          details: parsed.error.flatten(),
+        },
       });
     }
 
     try {
-      const data =
-        await companyIntegrationService
-          .connectOpenAi(
-            context.companyId,
-            context.userId,
-            parsed.data
-          );
+      const data = await companyIntegrationService.connectOpenAi(
+        context.companyId,
+        context.userId,
+        parsed.data,
+      );
 
       return reply.send({
         success: true,
-        message:
-          "OpenAI conectada com segurança.",
-        data
+        message: "OpenAI conectada com segurança.",
+        data,
       });
     } catch (error: unknown) {
       /*
@@ -183,25 +144,17 @@ export class CompanyIntegrationController {
        */
       request.log.error(
         {
-          code:
-            (error as CodedError)?.code
+          code: (error as CodedError)?.code,
         },
-        "Falha ao conectar OpenAI."
+        "Falha ao conectar OpenAI.",
       );
 
-      return errorResponse(
-        error,
-        reply
-      );
+      return errorResponse(error, reply);
     }
   }
 
-  async testOpenAi(
-    request: FastifyRequest,
-    reply: FastifyReply
-  ) {
-    const context =
-      contextOrReply(request, reply);
+  async testOpenAi(request: FastifyRequest, reply: FastifyReply) {
+    const context = contextOrReply(request, reply);
 
     if (!context) return;
 
@@ -209,38 +162,31 @@ export class CompanyIntegrationController {
       return reply.status(403).send({
         success: false,
         error: {
-          code:
-            "INTEGRATION_MANAGE_FORBIDDEN",
-          message:
-            "Seu usuário não possui permissão para testar integrações."
-        }
+          code: "INTEGRATION_MANAGE_FORBIDDEN",
+          message: "Seu usuário não possui permissão para testar integrações.",
+        },
       });
     }
 
     try {
-      const data =
-        await companyIntegrationService
-          .testOpenAi(context.companyId);
+      const data = await companyIntegrationService.testOpenAi(
+        context.companyId,
+      );
 
       return reply.send({
         success: true,
-        message:
-          "Conexão OpenAI validada.",
-        data
+        message: "Conexão OpenAI validada.",
+        data,
       });
     } catch (error: unknown) {
       request.log.error(
         {
-          code:
-            (error as CodedError)?.code
+          code: (error as CodedError)?.code,
         },
-        "Falha ao testar OpenAI."
+        "Falha ao testar OpenAI.",
       );
 
-      return errorResponse(
-        error,
-        reply
-      );
+      return errorResponse(error, reply);
     }
   }
 
@@ -248,40 +194,31 @@ export class CompanyIntegrationController {
     request: FastifyRequest<{
       Body: CompanyAiResponsesInput;
     }>,
-    reply: FastifyReply
+    reply: FastifyReply,
   ) {
-    const parsed =
-      companyAiResponsesSchema.safeParse(
-        request.body
-      );
+    const parsed = companyAiResponsesSchema.safeParse(request.body);
 
     if (!parsed.success) {
       return reply.status(400).send({
         success: false,
         error: {
           code: "VALIDATION_ERROR",
-          message:
-            "A solicitação de IA é inválida.",
-          details:
-            parsed.error.flatten()
-        }
+          message: "A solicitação de IA é inválida.",
+          details: parsed.error.flatten(),
+        },
       });
     }
 
     try {
-      const result =
-        await companyIntegrationService
-          .proxyOpenAiResponses(
-            parsed.data
-          );
+      const result = await companyIntegrationService.proxyOpenAiResponses(
+        parsed.data,
+      );
 
       /*
        * Mantém o contrato original da
        * Responses API para o workflow.
        */
-      return reply
-        .status(result.status)
-        .send(result.payload);
+      return reply.status(result.status).send(result.payload);
     } catch (error: unknown) {
       /*
        * Nunca registrar prompt, imagens,
@@ -289,27 +226,18 @@ export class CompanyIntegrationController {
        */
       request.log.error(
         {
-          code:
-            (error as CodedError)?.code,
-          companyId:
-            parsed.data.company_id
+          code: (error as CodedError)?.code,
+          companyId: parsed.data.company_id,
         },
-        "Falha no gateway OpenAI."
+        "Falha no gateway OpenAI.",
       );
 
-      return errorResponse(
-        error,
-        reply
-      );
+      return errorResponse(error, reply);
     }
   }
 
-  async disconnectOpenAi(
-    request: FastifyRequest,
-    reply: FastifyReply
-  ) {
-    const context =
-      contextOrReply(request, reply);
+  async disconnectOpenAi(request: FastifyRequest, reply: FastifyReply) {
+    const context = contextOrReply(request, reply);
 
     if (!context) return;
 
@@ -317,43 +245,33 @@ export class CompanyIntegrationController {
       return reply.status(403).send({
         success: false,
         error: {
-          code:
-            "INTEGRATION_MANAGE_FORBIDDEN",
-          message:
-            "Seu usuário não possui permissão para remover integrações."
-        }
+          code: "INTEGRATION_MANAGE_FORBIDDEN",
+          message: "Seu usuário não possui permissão para remover integrações.",
+        },
       });
     }
 
     try {
-      const data =
-        await companyIntegrationService
-          .disconnectOpenAi(
-            context.companyId
-          );
+      const data = await companyIntegrationService.disconnectOpenAi(
+        context.companyId,
+      );
 
       return reply.send({
         success: true,
-        message:
-          "OpenAI desconectada.",
-        data
+        message: "OpenAI desconectada.",
+        data,
       });
     } catch (error: unknown) {
       request.log.error(
         {
-          code:
-            (error as CodedError)?.code
+          code: (error as CodedError)?.code,
         },
-        "Falha ao desconectar OpenAI."
+        "Falha ao desconectar OpenAI.",
       );
 
-      return errorResponse(
-        error,
-        reply
-      );
+      return errorResponse(error, reply);
     }
   }
 }
 
-export const companyIntegrationController =
-  new CompanyIntegrationController();
+export const companyIntegrationController = new CompanyIntegrationController();
