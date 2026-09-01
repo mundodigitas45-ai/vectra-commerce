@@ -1,4 +1,5 @@
 import type {
+  CompanyAiResponsesInput,
   ConnectOpenAiInput
 } from "./company-integration.schemas";
 
@@ -322,6 +323,191 @@ export class CompanyIntegrationService {
         .catch(() => undefined);
 
       throw error;
+    }
+  }
+
+  async proxyOpenAiResponses(
+    input: CompanyAiResponsesInput
+  ) {
+    await companyIntegrationRepository
+      .assertOpenAiFeature(
+        input.company_id
+      );
+
+    const integration =
+      await companyIntegrationRepository
+        .getOpenAi(input.company_id);
+
+    if (
+      !integration ||
+      !integration.is_enabled ||
+      integration.status ===
+        "not_configured"
+    ) {
+      throw codedError(
+        "OPENAI_NOT_CONFIGURED",
+        "A OpenAI ainda não foi conectada para esta empresa.",
+        409
+      );
+    }
+
+    const apiKey =
+      await companyIntegrationRepository
+        .readOpenAiSecret(
+          input.company_id,
+          integration.id
+        );
+
+    const configuredModel =
+      integration.public_config &&
+      typeof integration.public_config
+        .default_model === "string"
+        ? integration.public_config
+            .default_model
+        : "gpt-4.1-mini";
+
+    const requestedTokens =
+      typeof input.request
+        .max_output_tokens === "number"
+        ? input.request.max_output_tokens
+        : 1200;
+
+    const safeRequest = {
+      ...input.request,
+
+      /*
+       * A empresa controla o modelo pelo
+       * painel, não pelo workflow.
+       */
+      model: configuredModel,
+
+      /*
+       * Limite técnico contra requisições
+       * acidentais exageradas.
+       */
+      max_output_tokens:
+        Math.max(
+          1,
+          Math.min(
+            Math.trunc(requestedTokens),
+            4000
+          )
+        )
+    };
+
+    const controller =
+      new AbortController();
+
+    const timeout = setTimeout(
+      () => controller.abort(),
+      90000
+    );
+
+    try {
+      const response = await fetch(
+        "https://api.openai.com/v1/responses",
+        {
+          method: "POST",
+          headers: {
+            Authorization:
+              `Bearer ${apiKey}`,
+            "Content-Type":
+              "application/json",
+            Accept:
+              "application/json"
+          },
+          body:
+            JSON.stringify(safeRequest),
+          signal: controller.signal
+        }
+      );
+
+      const raw =
+        await response.text();
+
+      let payload: unknown = raw;
+
+      try {
+        payload =
+          raw ? JSON.parse(raw) : {};
+      } catch {
+        payload = {
+          error: {
+            code:
+              "OPENAI_INVALID_RESPONSE",
+            message:
+              "A OpenAI retornou uma resposta inválida."
+          }
+        };
+      }
+
+      const now =
+        new Date().toISOString();
+
+      if (response.ok) {
+        await companyIntegrationRepository
+          .markOpenAiState(
+            input.company_id,
+            integration.id,
+            {
+              status: "connected",
+              enabled: true,
+              lastError: null,
+              validatedAt: now
+            }
+          );
+      } else {
+        const authFailure =
+          response.status === 401 ||
+          response.status === 403;
+
+        const rateLimited =
+          response.status === 429;
+
+        const safeMessage =
+          authFailure
+            ? "A credencial OpenAI foi recusada."
+            : rateLimited
+              ? "A conta OpenAI está sem cota ou temporariamente limitada."
+              : `A OpenAI retornou HTTP ${response.status}.`;
+
+        await companyIntegrationRepository
+          .markOpenAiState(
+            input.company_id,
+            integration.id,
+            {
+              status: "error",
+              enabled: !authFailure,
+              lastError: safeMessage,
+              validatedAt: now
+            }
+          )
+          .catch(() => undefined);
+      }
+
+      return {
+        status: response.status,
+        payload
+      };
+    } catch (error: unknown) {
+      if (
+        error instanceof Error &&
+        error.name === "AbortError"
+      ) {
+        throw codedError(
+          "OPENAI_REQUEST_TIMEOUT",
+          "A OpenAI excedeu o tempo de resposta.",
+          504
+        );
+      }
+
+      throw codedError(
+        "OPENAI_REQUEST_FAILED",
+        "Não foi possível acessar a OpenAI.",
+        502
+      );
+    } finally {
+      clearTimeout(timeout);
     }
   }
 

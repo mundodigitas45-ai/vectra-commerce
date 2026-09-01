@@ -4,7 +4,9 @@ import type {
 } from "fastify";
 
 import {
+  companyAiResponsesSchema,
   connectOpenAiSchema,
+  type CompanyAiResponsesInput,
   type ConnectOpenAiInput
 } from "./company-integration.schemas";
 
@@ -233,6 +235,66 @@ export class CompanyIntegrationController {
             (error as CodedError)?.code
         },
         "Falha ao testar OpenAI."
+      );
+
+      return errorResponse(
+        error,
+        reply
+      );
+    }
+  }
+
+  async proxyOpenAiResponses(
+    request: FastifyRequest<{
+      Body: CompanyAiResponsesInput;
+    }>,
+    reply: FastifyReply
+  ) {
+    const parsed =
+      companyAiResponsesSchema.safeParse(
+        request.body
+      );
+
+    if (!parsed.success) {
+      return reply.status(400).send({
+        success: false,
+        error: {
+          code: "VALIDATION_ERROR",
+          message:
+            "A solicitação de IA é inválida.",
+          details:
+            parsed.error.flatten()
+        }
+      });
+    }
+
+    try {
+      const result =
+        await companyIntegrationService
+          .proxyOpenAiResponses(
+            parsed.data
+          );
+
+      /*
+       * Mantém o contrato original da
+       * Responses API para o workflow.
+       */
+      return reply
+        .status(result.status)
+        .send(result.payload);
+    } catch (error: unknown) {
+      /*
+       * Nunca registrar prompt, imagens,
+       * chave ou corpo da requisição.
+       */
+      request.log.error(
+        {
+          code:
+            (error as CodedError)?.code,
+          companyId:
+            parsed.data.company_id
+        },
+        "Falha no gateway OpenAI."
       );
 
       return errorResponse(
