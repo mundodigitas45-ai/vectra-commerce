@@ -37,6 +37,21 @@ function productError(
   }
 
   if (
+    message.includes(
+      "PRODUCT_ALREADY_ARCHIVED"
+    )
+  ) {
+    return reply.status(409).send({
+      success: false,
+      error: {
+        code: "PRODUCT_ALREADY_ARCHIVED",
+        message:
+          "Este produto já foi excluído do painel."
+      }
+    });
+  }
+
+  if (
     message.includes("duplicate") ||
     message.includes("unique") ||
     message.includes("PRODUCT_SLUG_ALREADY_EXISTS")
@@ -185,6 +200,31 @@ export class ProductController {
       return reply.send({
         success: true,
         message: "Produto atualizado com sucesso.",
+        data
+      });
+    } catch (error) {
+      return productError(reply, error);
+    }
+  }
+
+  async archive(
+    request: FastifyRequest<{
+      Params: ProductParams;
+    }>,
+    reply: FastifyReply
+  ) {
+    try {
+      const data =
+        await productService.archive(
+          request.params.productId,
+          request.adminEmail ??
+            "administrador-nao-identificado"
+        );
+
+      return reply.send({
+        success: true,
+        message:
+          "Produto excluído do painel com sucesso. O histórico comercial foi preservado.",
         data
       });
     } catch (error) {

@@ -56,25 +56,71 @@ function createSlug(name: string): string {
 
 export class ProductService {
   async list() {
-    const { data, error } = await supabase
-      .from("inventory_summary")
-      .select(`
-        product_id,
-        product_name,
-        product_slug,
-        sale_price,
-        cost_price,
-        available_quantity,
-        minimum_quantity,
-        is_low_stock
-      `)
-      .order("product_name");
+    const companyId =
+      process.env.COMPANY_ID;
 
-    if (error) {
-      throw error;
+    if (!companyId) {
+      throw new Error(
+        "COMPANY_ID_NOT_CONFIGURED"
+      );
     }
 
-    return data;
+    const [
+      inventoryResult,
+      productsResult
+    ] = await Promise.all([
+      supabase
+        .from("inventory_summary")
+        .select(`
+          product_id,
+          product_name,
+          product_slug,
+          sale_price,
+          cost_price,
+          available_quantity,
+          minimum_quantity,
+          is_low_stock
+        `)
+        .order("product_name"),
+      supabase
+        .from("products")
+        .select("id,metadata")
+        .eq("company_id", companyId)
+    ]);
+
+    if (inventoryResult.error) {
+      throw inventoryResult.error;
+    }
+
+    if (productsResult.error) {
+      throw productsResult.error;
+    }
+
+    const archivedIds = new Set(
+      (productsResult.data ?? [])
+        .filter((product) => {
+          const metadata =
+            product.metadata;
+
+          return Boolean(
+            metadata &&
+            typeof metadata === "object" &&
+            !Array.isArray(metadata) &&
+            "archived_at" in metadata &&
+            metadata.archived_at
+          );
+        })
+        .map((product) => product.id)
+    );
+
+    return (
+      inventoryResult.data ?? []
+    ).filter(
+      (product) =>
+        !archivedIds.has(
+          product.product_id
+        )
+    );
   }
 
   findById(productId: string) {
@@ -267,6 +313,16 @@ export class ProductService {
     return productRepository.update(
       productId,
       normalized
+    );
+  }
+
+  archive(
+    productId: string,
+    actorEmail: string
+  ) {
+    return productRepository.archive(
+      productId,
+      actorEmail
     );
   }
 

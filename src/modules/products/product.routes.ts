@@ -78,6 +78,18 @@ export async function productRoutes(
     )
   );
 
+  app.delete<{
+    Params: ProductParams;
+  }>(
+    "/api/v1/products/:productId",
+    {
+      preHandler: requireStockAdmin
+    },
+    productController.archive.bind(
+      productController
+    )
+  );
+
   /* =====================================================
    * BIBLIOTECA UNIVERSAL DE MIDIAS
    * ===================================================== */

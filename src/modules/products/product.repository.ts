@@ -180,6 +180,73 @@ export class ProductRepository {
     return this.findById(productId);
   }
 
+  async archive(
+    productId: string,
+    actorEmail: string
+  ) {
+    const companyId =
+      requiredEnvironment("COMPANY_ID");
+
+    const current =
+      await this.findById(productId);
+
+    if (!current) {
+      throw new Error("PRODUCT_NOT_FOUND");
+    }
+
+    const metadata =
+      current.metadata &&
+      typeof current.metadata === "object" &&
+      !Array.isArray(current.metadata)
+        ? current.metadata as Record<
+            string,
+            unknown
+          >
+        : {};
+
+    if (metadata.archived_at) {
+      throw new Error(
+        "PRODUCT_ALREADY_ARCHIVED"
+      );
+    }
+
+    const archivedAt =
+      new Date().toISOString();
+
+    const { data, error } = await supabase
+      .from("products")
+      .update({
+        is_active: false,
+        metadata: {
+          ...metadata,
+          archived_at: archivedAt,
+          archived_by: actorEmail,
+          archive_reason:
+            "Removido pelo administrador no painel"
+        },
+        updated_at: archivedAt
+      })
+      .eq("company_id", companyId)
+      .eq("id", productId)
+      .select(
+        "id,name,is_active,metadata,updated_at"
+      )
+      .maybeSingle();
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    if (!data) {
+      throw new Error("PRODUCT_NOT_FOUND");
+    }
+
+    return {
+      ...data,
+      archived_at: archivedAt
+    };
+  }
+
   async updateStatus(
     productId: string,
     isActive: boolean
