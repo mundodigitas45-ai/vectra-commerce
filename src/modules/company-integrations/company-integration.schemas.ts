@@ -22,3 +22,26 @@ export const connectOpenAiSchema = z.object({
 
 export type ConnectOpenAiInput =
   z.infer<typeof connectOpenAiSchema>;
+
+
+export const companyAiResponsesSchema = z.object({
+  company_id: z
+    .string()
+    .uuid(),
+
+  request: z
+    .record(z.unknown())
+    .refine(
+      (value) =>
+        value.input !== undefined,
+      {
+        message:
+          "A requisição precisa conter input."
+      }
+    )
+});
+
+export type CompanyAiResponsesInput =
+  z.infer<
+    typeof companyAiResponsesSchema
+  >;
