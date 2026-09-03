@@ -2281,6 +2281,61 @@
           75968,
           15328
         ]
+      },
+      {
+        "parameters": {
+          "jsCode": "function executed(name) {\n  try {\n    const reference = $(name);\n\n    if (!reference.isExecuted) {\n      return null;\n    }\n\n    return reference.first().json ?? null;\n  } catch {\n    return null;\n  }\n}\n\nfunction uuidOrNull(value) {\n  const text = String(value ?? \"\").trim();\n\n  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i\n    .test(text)\n      ? text\n      : null;\n}\n\nfunction numberOrNull(value) {\n  const parsed = Number(value);\n\n  return Number.isFinite(parsed) && parsed >= 0\n    ? parsed\n    : null;\n}\n\nconst config =\n  executed(\"Configuração Geral1\") ?? {};\n\nconst message =\n  executed(\"Extrair Mensagem\") ?? {};\n\nconst consolidated =\n  executed(\"Consolidar Sessão\") ?? {};\n\nconst official =\n  executed(\n    \"Aplicar Estado Oficial Pós-Salvamento\"\n  ) ?? {};\n\nconst createdOrder =\n  executed(\"Resposta Pedido Criado\");\n\nconst cancelledOrder =\n  executed(\n    \"Confirmar Cancelamento do Pedido\"\n  );\n\nconst finalData =\n  cancelledOrder ??\n  createdOrder ??\n  official ??\n  consolidated ??\n  {};\n\nconst state = {\n  ...(consolidated.state ?? {}),\n  ...(official.state ?? {}),\n  ...(finalData.state ?? {}),\n};\n\nconst checkoutPhase = String(\n  state.checkout_phase ??\n  finalData.checkout_phase ??\n  \"\"\n).toLowerCase();\n\nconst sessionStatus = String(\n  state.status ??\n  finalData.status ??\n  \"\"\n).toLowerCase();\n\nconst orderId = uuidOrNull(\n  state.order_id ??\n  finalData.order_id ??\n  createdOrder?.state?.order_id\n);\n\nconst productId = uuidOrNull(\n  state.product_id ??\n  finalData.product_id\n);\n\nconst productName = String(\n  state.product_name ??\n  finalData.product_name ??\n  \"\"\n).trim();\n\nconst deviceBrand = String(\n  state.device_brand ??\n  finalData.device_brand ??\n  finalData.compatibility_search?.brand ??\n  \"\"\n).trim();\n\nconst deviceModel = String(\n  state.device_model ??\n  finalData.device_model ??\n  finalData.compatibility_search?.model ??\n  \"\"\n).trim();\n\nconst compatibilityConfirmed = Boolean(\n  finalData.compatibility_confirmed ||\n  finalData.compatibility?.resolved ||\n  finalData.compatibility_result\n    ?.resolution_status === \"RESOLVED\" ||\n  (\n    deviceModel &&\n    (\n      finalData.recommended_product ||\n      finalData.compatibility_product ||\n      state.compatibility_confirmed\n    )\n  )\n);\n\nlet eventType = \"message_received\";\n\nif (\n  cancelledOrder\n    ?.orderCancellationCompleted === true\n) {\n  eventType = \"order_cancelled\";\n} else if (\n  orderId &&\n  (\n    createdOrder ||\n    sessionStatus === \"reserved\" ||\n    sessionStatus === \"confirmed\" ||\n    checkoutPhase === \"reserved\"\n  )\n) {\n  eventType = \"order_created\";\n} else if (\n  checkoutPhase ===\n    \"awaiting_confirmation\" ||\n  finalData.awaiting_confirmation === true\n) {\n  eventType = \"awaiting_confirmation\";\n} else if (\n  checkoutPhase === \"awaiting_payment\" &&\n  state.address\n) {\n  eventType = \"address_received\";\n} else if (\n  checkoutPhase === \"awaiting_address\" ||\n  (\n    productId &&\n    state.quantity &&\n    state.neighborhood &&\n    !state.address\n  )\n) {\n  eventType = \"awaiting_address\";\n} else if (compatibilityConfirmed) {\n  eventType = \"compatibility_confirmed\";\n} else if (productId || productName) {\n  eventType = \"product_identified\";\n}\n\nconst quantity = numberOrNull(\n  state.quantity\n);\n\nconst unitPrice = numberOrNull(\n  state.unit_price\n);\n\nconst deliveryFee =\n  numberOrNull(state.delivery_fee) ?? 0;\n\nconst calculatedValue =\n  quantity !== null &&\n  unitPrice !== null\n    ? quantity * unitPrice + deliveryFee\n    : null;\n\nconst estimatedValue =\n  numberOrNull(\n    state.total ??\n    finalData.total ??\n    calculatedValue\n  );\n\nconst customerNameRaw = String(\n  state.customer_name ??\n  finalData.customer_name ??\n  message.customerName ??\n  \"\"\n).trim();\n\nconst customerName =\n  customerNameRaw &&\n  !/^(cliente|undefined|null)$/i\n    .test(customerNameRaw)\n      ? customerNameRaw\n      : null;\n\nconst customerNumber = String(\n  state.customer_number ??\n  finalData.customer_number ??\n  message.number ??\n  \"\"\n)\n  .replace(/\\D+/g, \"\");\n\nconst externalId = String(\n  message.messageId ??\n  `${customerNumber}-${Date.now()}`\n).trim();\n\nconst crmEvent = {\n  company_id: config.companyId,\n  instance_name:\n    config.evolutionInstance ??\n    message.instance ??\n    \"miranda-express\",\n  customer_number: customerNumber,\n  customer_name: customerName,\n  event_type: eventType,\n  external_id: externalId,\n  occurred_at: new Date().toISOString(),\n  customer_id: uuidOrNull(\n    state.customer_id ??\n    finalData.customer_id\n  ),\n  store_id: uuidOrNull(\n    config.storeId ??\n    state.store_id\n  ),\n  order_id: orderId,\n  estimated_value: estimatedValue,\n  product_context: {\n    product_id: productId,\n    product_name:\n      productName || null,\n    quantity,\n    unit_price: unitPrice,\n    delivery_fee: deliveryFee,\n  },\n  device_context: {\n    brand:\n      deviceBrand || null,\n    model:\n      deviceModel || null,\n  },\n  metadata: {\n    source: \"miranda_whatsapp_v26\",\n    route:\n      finalData.route ??\n      finalData.fast_route ??\n      null,\n    checkout_phase:\n      checkoutPhase || null,\n    session_status:\n      sessionStatus || null,\n    inbound_text:\n      String(message.text ?? \"\")\n        .slice(0, 500),\n    bot_reply:\n      String(\n        finalData.reply ??\n        state.last_bot_message ??\n        \"\"\n      ).slice(0, 1000),\n  },\n};\n\nreturn [{\n  json: {\n    crm_event: crmEvent,\n    crm_event_type: eventType,\n    crm_external_id: externalId,\n  },\n}];"
+        },
+        "id": "9c91bcac-77a8-4ce7-9304-7bdabbe36ba8",
+        "name": "Preparar Evento CRM",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          77360,
+          15376
+        ]
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "={{ $('Configuração Geral1').first().json.commerceApiUrl + '/api/v1/internal/crm/events' }}",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "name": "x-creative-worker-secret",
+                "value": "={{ $env.CREATIVE_WORKER_SECRET }}"
+              }
+            ]
+          },
+          "sendBody": true,
+          "contentType": "raw",
+          "rawContentType": "application/json",
+          "body": "={{ JSON.stringify($json.crm_event) }}",
+          "options": {
+            "response": {
+              "response": {
+                "neverError": true,
+                "responseFormat": "json"
+              }
+            },
+            "timeout": 30000
+          }
+        },
+        "id": "e630b7ba-a4eb-46e2-a66b-c795780fc379",
+        "name": "Registrar Evento CRM",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          77616,
+          15376
+        ],
+        "continueOnFail": true,
+        "onError": "continueRegularOutput"
       }
     ],
     "connections": {
@@ -3238,6 +3293,28 @@
           [
             {
               "node": "Tem Imagem do Produto?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Registrar mensagem enviada pelo robô": {
+        "main": [
+          [
+            {
+              "node": "Preparar Evento CRM",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Preparar Evento CRM": {
+        "main": [
+          [
+            {
+              "node": "Registrar Evento CRM",
               "type": "main",
               "index": 0
             }
