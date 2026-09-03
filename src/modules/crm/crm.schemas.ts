@@ -340,6 +340,98 @@ export const createCrmActivitySchema =
       .default({})
   });
 
+export const crmInternalEventSchema =
+  z.object({
+    company_id:
+      crmUuidSchema,
+
+    instance_name: z
+      .string()
+      .trim()
+      .min(1)
+      .max(120),
+
+    customer_number: z
+      .string()
+      .trim()
+      .min(10)
+      .max(40),
+
+    customer_name: z
+      .string()
+      .trim()
+      .min(1)
+      .max(180)
+      .nullable()
+      .optional(),
+
+    event_type: z.enum([
+      "conversation_started",
+      "message_received",
+      "product_identified",
+      "compatibility_confirmed",
+      "awaiting_address",
+      "address_received",
+      "awaiting_confirmation",
+      "order_created",
+      "order_confirmed",
+      "order_cancelled",
+      "order_delivered",
+      "human_takeover"
+    ]),
+
+    external_id: z
+      .string()
+      .trim()
+      .min(1)
+      .max(255)
+      .nullable()
+      .optional(),
+
+    occurred_at: z
+      .string()
+      .datetime({
+        offset: true
+      })
+      .optional(),
+
+    customer_id:
+      crmUuidSchema.nullable().optional(),
+
+    store_id:
+      crmUuidSchema.nullable().optional(),
+
+    order_id:
+      crmUuidSchema.nullable().optional(),
+
+    estimated_value: z
+      .number()
+      .finite()
+      .min(0)
+      .nullable()
+      .optional(),
+
+    product_context: z
+      .record(z.unknown())
+      .optional()
+      .default({}),
+
+    device_context: z
+      .record(z.unknown())
+      .optional()
+      .default({}),
+
+    metadata: z
+      .record(z.unknown())
+      .optional()
+      .default({})
+  });
+
+export type CrmInternalEventInput =
+  z.infer<
+    typeof crmInternalEventSchema
+  >;
+
 export type CrmBoardQuery =
   z.infer<
     typeof crmBoardQuerySchema

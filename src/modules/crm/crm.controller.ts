@@ -12,6 +12,7 @@ import {
   crmBoardQuerySchema,
   crmContactParamsSchema,
   crmContactsQuerySchema,
+  crmInternalEventSchema,
   crmOpportunityParamsSchema,
   moveCrmOpportunitySchema,
   updateCrmOpportunitySchema
@@ -478,6 +479,56 @@ export class CrmController {
         data
       });
     } catch (error: unknown) {
+      return errorResponse(
+        error,
+        reply
+      );
+    }
+  }
+
+  async internalEvent(
+    request: FastifyRequest,
+    reply: FastifyReply
+  ) {
+    const parsed =
+      crmInternalEventSchema.safeParse(
+        request.body
+      );
+
+    if (!parsed.success) {
+      return validationError(
+        reply,
+        "O evento interno do CRM é inválido.",
+        parsed.error.flatten()
+      );
+    }
+
+    try {
+      const data =
+        await crmService
+          .processInternalEvent(
+            parsed.data
+          );
+
+      return reply.send({
+        success: true,
+        message:
+          "Evento registrado no CRM.",
+        data
+      });
+    } catch (error: unknown) {
+      request.log.error(
+        {
+          code:
+            (error as CodedError)?.code,
+          companyId:
+            parsed.data.company_id,
+          eventType:
+            parsed.data.event_type
+        },
+        "Falha ao registrar evento interno no CRM."
+      );
+
       return errorResponse(
         error,
         reply

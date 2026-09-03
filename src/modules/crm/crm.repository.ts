@@ -295,48 +295,153 @@ export class CrmRepository {
 
   async upsertContact(
     companyId: string,
-    userId: string,
+    userId: string | null,
     input: CreateCrmContactInput
   ) {
     const now =
       new Date().toISOString();
 
-    const { data, error } = await supabase
+    const {
+      data: existing,
+      error: findError
+    } = await supabase
       .from("crm_contacts")
-      .upsert(
-        {
-          company_id: companyId,
-          customer_id:
-            input.customer_id ?? null,
-          store_id:
-            input.store_id ?? null,
-          channel: input.channel,
-          channel_identifier:
-            input.channel_identifier,
-          whatsapp_instance_name:
-            input.whatsapp_instance_name ??
-            null,
-          name:
-            input.name ?? null,
-          phone:
-            input.phone ?? null,
-          email:
-            input.email ?? null,
-          source: input.source,
+      .select("*")
+      .eq("company_id", companyId)
+      .eq("channel", input.channel)
+      .eq(
+        "channel_identifier",
+        input.channel_identifier
+      )
+      .maybeSingle();
+
+    if (findError) {
+      throw databaseError(findError);
+    }
+
+    if (existing) {
+      const patch:
+        Record<string, unknown> = {
           status: "active",
           last_interaction_at: now,
-          metadata: input.metadata,
-          created_by: userId
-        },
-        {
-          onConflict:
-            "company_id,channel,channel_identifier"
-        }
-      )
+          metadata: {
+            ...(
+              existing.metadata &&
+              typeof existing.metadata ===
+                "object"
+                ? existing.metadata
+                : {}
+            ),
+            ...input.metadata
+          }
+        };
+
+      if (input.customer_id !== undefined) {
+        patch.customer_id =
+          input.customer_id;
+      }
+
+      if (input.store_id !== undefined) {
+        patch.store_id =
+          input.store_id;
+      }
+
+      if (
+        input.whatsapp_instance_name !==
+        undefined
+      ) {
+        patch.whatsapp_instance_name =
+          input.whatsapp_instance_name;
+      }
+
+      if (input.name !== undefined) {
+        patch.name = input.name;
+      }
+
+      if (input.phone !== undefined) {
+        patch.phone = input.phone;
+      }
+
+      if (input.email !== undefined) {
+        patch.email = input.email;
+      }
+
+      const {
+        data,
+        error
+      } = await supabase
+        .from("crm_contacts")
+        .update(patch)
+        .eq("company_id", companyId)
+        .eq("id", existing.id)
+        .select("*")
+        .single();
+
+      if (error) {
+        throw databaseError(error);
+      }
+
+      return data;
+    }
+
+    const { data, error } = await supabase
+      .from("crm_contacts")
+      .insert({
+        company_id: companyId,
+        customer_id:
+          input.customer_id ?? null,
+        store_id:
+          input.store_id ?? null,
+        channel: input.channel,
+        channel_identifier:
+          input.channel_identifier,
+        whatsapp_instance_name:
+          input.whatsapp_instance_name ??
+          null,
+        name:
+          input.name ?? null,
+        phone:
+          input.phone ?? null,
+        email:
+          input.email ?? null,
+        source: input.source,
+        status: "active",
+        last_interaction_at: now,
+        metadata: input.metadata,
+        created_by: userId
+      })
       .select("*")
       .single();
 
     if (error) {
+      /*
+       * Outra execução pode criar o contato
+       * entre o SELECT e o INSERT.
+       */
+      if (error.code === "23505") {
+        const {
+          data: concurrentContact,
+          error: concurrentError
+        } = await supabase
+          .from("crm_contacts")
+          .select("*")
+          .eq("company_id", companyId)
+          .eq("channel", input.channel)
+          .eq(
+            "channel_identifier",
+            input.channel_identifier
+          )
+          .single();
+
+        if (concurrentError) {
+          throw databaseError(
+            concurrentError
+          );
+        }
+
+        return concurrentContact;
+      }
+
       throw databaseError(error);
     }
 
@@ -397,6 +502,51 @@ export class CrmRepository {
     };
   }
 
+  async findOpportunityByOrder(
+    companyId: string,
+    orderId: string
+  ) {
+    const { data, error } = await supabase
+      .from("crm_opportunities")
+      .select("*")
+      .eq("company_id", companyId)
+      .eq("order_id", orderId)
+      .order("updated_at", {
+        ascending: false
+      })
+      .limit(1)
+      .maybeSingle();
+
+    if (error) {
+      throw databaseError(error);
+    }
+
+    return data;
+  }
+
+  async findOpenOpportunity(
+    companyId: string,
+    contactId: string
+  ) {
+    const { data, error } = await supabase
+      .from("crm_opportunities")
+      .select("*")
+      .eq("company_id", companyId)
+      .eq("contact_id", contactId)
+      .eq("status", "open")
+      .order("updated_at", {
+        ascending: false
+      })
+      .limit(1)
+      .maybeSingle();
+
+    if (error) {
+      throw databaseError(error);
+    }
+
+    return data;
+  }
+
   async getOpportunity(
     companyId: string,
     opportunityId: string
@@ -424,7 +574,7 @@ export class CrmRepository {
 
   async createOpportunity(
     companyId: string,
-    userId: string,
+    userId: string | null,
     pipelineId: string,
     stageId: string,
     input: CreateCrmOpportunityInput
@@ -535,7 +685,7 @@ export class CrmRepository {
 
   async createActivity(
     companyId: string,
-    userId: string,
+    userId: string | null,
     opportunityId: string,
     contactId: string,
     input: CreateCrmActivityInput

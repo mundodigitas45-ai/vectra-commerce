@@ -6,6 +6,7 @@ import type {
   CreateCrmOpportunityInput,
   CrmBoardQuery,
   CrmContactsQuery,
+  CrmInternalEventInput,
   MoveCrmOpportunityInput,
   UpdateCrmOpportunityInput
 } from "./crm.schemas";
@@ -172,7 +173,7 @@ export class CrmService {
 
   async upsertContact(
     companyId: string,
-    userId: string,
+    userId: string | null,
     input: CreateCrmContactInput
   ) {
     return crmRepository.upsertContact(
@@ -191,7 +192,7 @@ export class CrmService {
 
   async createOpportunity(
     companyId: string,
-    userId: string,
+    userId: string | null,
     input: CreateCrmOpportunityInput
   ) {
     const contact =
@@ -349,7 +350,7 @@ export class CrmService {
 
   async createActivity(
     companyId: string,
-    userId: string,
+    userId: string | null,
     opportunityId: string,
     input: CreateCrmActivityInput
   ) {
@@ -376,6 +377,295 @@ export class CrmService {
           null
       }
     );
+  }
+
+  async processInternalEvent(
+    input: CrmInternalEventInput
+  ) {
+    const customerNumber =
+      normalizeIdentifier(
+        "whatsapp",
+        input.customer_number
+      );
+
+    const contact =
+      await this.upsertContact(
+        input.company_id,
+        null,
+        {
+          customer_id:
+            input.customer_id,
+          store_id:
+            input.store_id,
+          channel:
+            "whatsapp",
+          channel_identifier:
+            customerNumber,
+          whatsapp_instance_name:
+            input.instance_name,
+          name:
+            input.customer_name,
+          phone:
+            customerNumber,
+          source:
+            "whatsapp_automation",
+          metadata: {
+            last_event:
+              input.event_type,
+            ...input.metadata
+          }
+        }
+      );
+
+    let opportunity =
+      input.order_id
+        ? await crmRepository
+            .findOpportunityByOrder(
+              input.company_id,
+              input.order_id
+            )
+        : null;
+
+    if (!opportunity) {
+      opportunity =
+        await crmRepository
+          .findOpenOpportunity(
+            input.company_id,
+            contact.id
+          );
+    }
+
+    if (!opportunity) {
+      opportunity =
+        await this.createOpportunity(
+          input.company_id,
+          null,
+          {
+            contact_id:
+              contact.id,
+            customer_id:
+              input.customer_id ??
+              contact.customer_id ??
+              null,
+            store_id:
+              input.store_id ??
+              contact.store_id ??
+              null,
+            order_id:
+              input.order_id ?? null,
+            title:
+              input.customer_name
+                ? `Atendimento de ${input.customer_name}`
+                : `Atendimento ${customerNumber.slice(-4)}`,
+            priority:
+              "normal",
+            estimated_value:
+              input.estimated_value ??
+              null,
+            currency:
+              "BRL",
+            product_context:
+              input.product_context,
+            device_context:
+              input.device_context,
+            metadata: {
+              source:
+                "whatsapp_automation",
+              instance_name:
+                input.instance_name
+            }
+          }
+        );
+    }
+
+    const update:
+      Record<string, unknown> = {};
+
+    if (
+      input.customer_id !== undefined
+    ) {
+      update.customer_id =
+        input.customer_id;
+    }
+
+    if (
+      input.store_id !== undefined
+    ) {
+      update.store_id =
+        input.store_id;
+    }
+
+    if (
+      input.order_id !== undefined
+    ) {
+      update.order_id =
+        input.order_id;
+    }
+
+    if (
+      input.estimated_value !== undefined
+    ) {
+      update.estimated_value =
+        input.estimated_value;
+    }
+
+    if (
+      Object.keys(
+        input.product_context
+      ).length > 0
+    ) {
+      update.product_context =
+        input.product_context;
+    }
+
+    if (
+      Object.keys(
+        input.device_context
+      ).length > 0
+    ) {
+      update.device_context =
+        input.device_context;
+    }
+
+    if (Object.keys(update).length > 0) {
+      opportunity =
+        await crmRepository
+          .updateOpportunity(
+            input.company_id,
+            opportunity.id,
+            update
+          );
+    }
+
+    const stageByEvent:
+      Partial<
+        Record<
+          CrmInternalEventInput[
+            "event_type"
+          ],
+          string
+        >
+      > = {
+        conversation_started:
+          "new_contact",
+        message_received:
+          "in_service",
+        product_identified:
+          "product_identified",
+        compatibility_confirmed:
+          "compatibility_confirmed",
+        awaiting_address:
+          "awaiting_address",
+        address_received:
+          "awaiting_confirmation",
+        awaiting_confirmation:
+          "awaiting_confirmation",
+        order_created:
+          "order_created",
+        order_confirmed:
+          "won",
+        order_cancelled:
+          "lost",
+        order_delivered:
+          "post_sale",
+        human_takeover:
+          "in_service"
+      };
+
+    const stageCode =
+      stageByEvent[input.event_type];
+
+    if (stageCode) {
+      const stage =
+        await crmRepository
+          .getStageByCode(
+            input.company_id,
+            opportunity.pipeline_id,
+            stageCode
+          );
+
+      const shouldMove =
+        opportunity.stage_id !==
+          stage.id ||
+        (
+          stage.stage_type === "won" &&
+          opportunity.status !== "won"
+        ) ||
+        (
+          stage.stage_type === "lost" &&
+          opportunity.status !== "lost"
+        );
+
+      if (shouldMove) {
+        opportunity =
+          await this.moveOpportunity(
+            input.company_id,
+            opportunity.id,
+            {
+              stage_id:
+                stage.id,
+              lost_reason:
+                input.event_type ===
+                "order_cancelled"
+                  ? "Pedido cancelado"
+                  : undefined
+            }
+          );
+      }
+    }
+
+    try {
+      await crmRepository.createActivity(
+        input.company_id,
+        null,
+        opportunity.id,
+        contact.id,
+        {
+          activity_type:
+            input.event_type,
+          direction:
+            input.event_type ===
+              "human_takeover"
+              ? "internal"
+              : "inbound",
+          title:
+            input.event_type
+              .replace(/_/g, " "),
+          external_id:
+            input.external_id ??
+            null,
+          customer_id:
+            input.customer_id ??
+            opportunity.customer_id ??
+            null,
+          order_id:
+            input.order_id ??
+            opportunity.order_id ??
+            null,
+          occurred_at:
+            input.occurred_at,
+          metadata:
+            input.metadata
+        }
+      );
+    } catch (error: unknown) {
+      const code =
+        (error as CodedError)?.code;
+
+      if (
+        code !==
+        "CRM_ACTIVITY_ALREADY_EXISTS"
+      ) {
+        throw error;
+      }
+    }
+
+    return {
+      contact,
+      opportunity,
+      event_type:
+        input.event_type
+    };
   }
 }
 
