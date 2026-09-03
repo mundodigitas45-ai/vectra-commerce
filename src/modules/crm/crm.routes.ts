@@ -7,12 +7,27 @@ import {
 } from "../auth/company-context.auth";
 
 import {
+  requireCreativeWorker
+} from "../creative-workers/creative-worker.auth";
+
+import {
   crmController
 } from "./crm.controller";
 
 export async function crmRoutes(
   app: FastifyInstance
 ) {
+  app.post(
+    "/api/v1/internal/crm/events",
+    {
+      preHandler:
+        requireCreativeWorker
+    },
+    crmController.internalEvent.bind(
+      crmController
+    )
+  );
+
   app.get(
     "/api/v1/crm/board",
     {
