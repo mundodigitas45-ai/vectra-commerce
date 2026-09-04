@@ -1,127 +1,99 @@
 import "dotenv/config";
 
-import {
-  buildApp
-} from "./app";
+import { buildApp } from "./app";
 
-import {
-  metaCapiWorker
-} from "./modules/meta-capi/meta-capi.worker";
+import { metaCapiWorker } from "./modules/meta-capi/meta-capi.worker";
 
-const port =
-  Number(
-    process.env.PORT ??
-    3000
-  );
+import { crmFollowupNotificationWorker } from "./modules/crm-followup-notifications/crm-followup-notification.worker";
 
-const host =
-  process.env.HOST ??
-  "0.0.0.0";
+const port = Number(process.env.PORT ?? 3000);
 
-async function start():
-  Promise<void> {
-  const app =
-    await buildApp();
+const host = process.env.HOST ?? "0.0.0.0";
 
-  let shuttingDown =
-    false;
+async function start(): Promise<void> {
+  const app = await buildApp();
 
-  const shutdown =
-    async (
-      signal:
-        "SIGTERM" |
-        "SIGINT"
-    ): Promise<void> => {
-      if (shuttingDown) {
-        return;
-      }
+  let shuttingDown = false;
 
-      shuttingDown =
-        true;
+  const shutdown = async (signal: "SIGTERM" | "SIGINT"): Promise<void> => {
+    if (shuttingDown) {
+      return;
+    }
+
+    shuttingDown = true;
+
+    app.log.info({
+      message: "Encerrando Vectra Commerce API",
+      signal,
+    });
+
+    metaCapiWorker.stop();
+    crmFollowupNotificationWorker.stop();
+
+    try {
+      await app.close();
 
       app.log.info({
-        message:
-          "Encerrando Vectra Commerce API",
-        signal
+        message: "Vectra Commerce API encerrada",
+        signal,
+      });
+    } catch (error) {
+      app.log.error({
+        message: "Erro ao encerrar Vectra Commerce API",
+        signal,
+        error,
       });
 
-      metaCapiWorker.stop();
-
-      try {
-        await app.close();
-
-        app.log.info({
-          message:
-            "Vectra Commerce API encerrada",
-          signal
-        });
-
-      } catch (error) {
-        app.log.error({
-          message:
-            "Erro ao encerrar Vectra Commerce API",
-          signal,
-          error
-        });
-
-        process.exitCode =
-          1;
-      }
-    };
-
-  process.once(
-    "SIGTERM",
-    () => {
-      void shutdown(
-        "SIGTERM"
-      );
+      process.exitCode = 1;
     }
-  );
+  };
 
-  process.once(
-    "SIGINT",
-    () => {
-      void shutdown(
-        "SIGINT"
-      );
-    }
-  );
+  process.once("SIGTERM", () => {
+    void shutdown("SIGTERM");
+  });
+
+  process.once("SIGINT", () => {
+    void shutdown("SIGINT");
+  });
 
   try {
     await app.listen({
       port,
-      host
-    });
-
-    app.log.info({
-      message:
-        "Vectra Commerce API iniciada",
       host,
-      port
     });
-
-    const workerStarted =
-      metaCapiWorker.start();
-
-    const workerStatus =
-      metaCapiWorker
-        .getStatus();
 
     app.log.info({
-      message:
-        "Meta CAPI worker configurado",
-      enabled:
-        workerStatus.enabled,
-      started:
-        workerStarted,
-      interval_ms:
-        workerStatus.interval_ms,
-      batch_size:
-        workerStatus.batch_size
+      message: "Vectra Commerce API iniciada",
+      host,
+      port,
     });
 
+    const workerStarted = metaCapiWorker.start();
+
+    const workerStatus = metaCapiWorker.getStatus();
+
+    app.log.info({
+      message: "Meta CAPI worker configurado",
+      enabled: workerStatus.enabled,
+      started: workerStarted,
+      interval_ms: workerStatus.interval_ms,
+      batch_size: workerStatus.batch_size,
+    });
+
+    const followupWorkerStarted = crmFollowupNotificationWorker.start();
+
+    const followupWorkerStatus = crmFollowupNotificationWorker.getStatus();
+
+    app.log.info({
+      message: "CRM follow-up worker configurado",
+      enabled: followupWorkerStatus.enabled,
+      started: followupWorkerStarted,
+      interval_ms: followupWorkerStatus.interval_ms,
+      batch_size: followupWorkerStatus.batch_size,
+    });
   } catch (error) {
     metaCapiWorker.stop();
+    crmFollowupNotificationWorker.stop();
 
     app.log.error(error);
 
