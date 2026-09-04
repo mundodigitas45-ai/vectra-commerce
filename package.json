@@ -16,11 +16,13 @@
     "@supabase/supabase-js": "^2.110.5",
     "dotenv": "^16.4.7",
     "fastify": "^5.2.0",
-    "zod": "^3.24.2",
-    "sharp": "^0.35.3"
+    "sharp": "^0.35.3",
+    "web-push": "^3.6.7",
+    "zod": "^3.24.2"
   },
   "devDependencies": {
     "@types/node": "^22.13.0",
+    "@types/web-push": "^3.6.4",
     "tsx": "^4.19.3",
     "typescript": "^5.7.3"
   }
