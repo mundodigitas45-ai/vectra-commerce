@@ -1056,7 +1056,7 @@
           "sendBody": true,
           "contentType": "raw",
           "rawContentType": "application/json",
-          "body": "={{ JSON.stringify({ customer_number: $('Extrair Mensagem').first().json.number, human_takeover: true, human_takeover_at: new Date().toISOString(), human_takeover_by: 'atendente-whatsapp', automation_paused_until: new Date(Date.now() + 30 * 60 * 1000).toISOString(), last_customer_message: $('Extrair Mensagem').first().json.text, updated_at: new Date().toISOString() }) }}",
+          "body": "={{ JSON.stringify({ customer_number: $('Extrair Mensagem').first().json.number, human_takeover: true, human_takeover_at: new Date().toISOString(), human_takeover_by: 'atendente-whatsapp', automation_paused_until: new Date(Date.now() + 30 * 60 * 1000).toISOString(), last_bot_message: $('Extrair Mensagem').first().json.text, updated_at: new Date().toISOString() }) }}",
           "options": {
             "timeout": 60000
           },
@@ -1080,7 +1080,8 @@
             "id": "xGRPmZIvPbSqU30E",
             "name": "Supabase Miranda Express"
           }
-        }
+        },
+        "disabled": true
       },
       {
         "parameters": {
@@ -2744,13 +2745,7 @@
       "É resposta enviada pelo robô?": {
         "main": [
           [],
-          [
-            {
-              "node": "Pausar automação da conversa",
-              "type": "main",
-              "index": 0
-            }
-          ]
+          []
         ]
       },
       "Automação está pausada?": {
