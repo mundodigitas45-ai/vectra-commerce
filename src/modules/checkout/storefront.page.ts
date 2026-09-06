@@ -400,29 +400,29 @@ export function renderStorefrontPage() {
       <div class="brandbar"><img src="${MIRANDA_LOGO_DATA_URI}" alt="Miranda Express" /><div><div class="brandname">MIRANDA <span class="gold">EXPRESS</span></div><div class="tag">Seu produto, na hora que você precisa.</div></div></div>
       <div class="hero-main">
         <div class="hero-copy">
-          <h1>Escolha seu produto e <span class="gold">agende sua entrega</span>.</h1>
+          <h1>Escolha seu produto. <span class="gold">Receba em casa e pague só na entrega.</span></h1>
 
           <div class="hero-message-zone">
             <div class="hero-main-message">
-              ⚡ Entrega rápida em Belém e regiões atendidas
+              🛡️ Agende sem pagar nada antecipado
             </div>
 
             <div class="hero-points">
-              <div class="hero-point">💰 Pagamento na entrega</div>
-              <div class="hero-point">✅ Confira antes de pagar</div>
+              <div class="hero-point">🚚 Entrega em Belém e regiões atendidas</div>
+              <div class="hero-point">💰 Pagamento somente ao receber</div>
             </div>
           </div>
 
-          <p>Reserve em poucos minutos. Você não informa cartão e não faz pagamento antecipado. Escolha o produto, informe seu endereço e pague somente quando receber.</p>
+          <p>No site você apenas agenda a entrega. Escolha o produto, informe o endereço e pague somente quando receber o produto em mãos.</p>
 
           <div class="hero-actions">
-            <a class="hero-cta primary" href="#produtos">VER PRODUTOS</a>
-            <a class="hero-cta secondary" href="#como-funciona">COMO FUNCIONA</a>
+            <a class="hero-cta primary" href="#produtos">AGENDAR MINHA ENTREGA</a>
+            <a class="hero-cta secondary" href="https://wa.me/5591920078425" target="_blank" rel="noopener noreferrer">TIRAR DÚVIDA NO WHATSAPP</a>
           </div>
 
           <div class="no-payment">
             <div>🛡️</div>
-            <span><strong>Sem pagamento antecipado.</strong><br/>Esta página serve para reservar o produto e agendar a entrega. A taxa é informada antes da confirmação.</span>
+            <span><strong>Você não paga nada pelo site.</strong><br/>Use esta página para escolher o produto e agendar a entrega. O pagamento é feito somente quando você receber.</span>
           </div>
           </div>
         </div>
@@ -430,8 +430,8 @@ export function renderStorefrontPage() {
 
       <div class="trust">
         <div>🚚 Entrega local</div>
+        <div>🛡️ Sem pagamento antecipado</div>
         <div>💰 Pague ao receber</div>
-        <div>📍 Taxa por bairro</div>
       </div>
       <div class="compat-search">
         <h3>📱 Qual é o seu celular?</h3>
