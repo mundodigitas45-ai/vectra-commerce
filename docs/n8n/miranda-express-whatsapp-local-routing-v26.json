@@ -2477,75 +2477,6 @@
         }
       },
       {
-        "id": "a32ff7a9-0452-480e-9ce8-00fc60639e78",
-        "name": "Preservar envio - status",
-        "type": "n8n-nodes-base.code",
-        "typeVersion": 2,
-        "position": [
-          73084,
-          14944
-        ],
-        "parameters": {
-          "jsCode": "const number = String($('Preparar WhatsApp').first().json.number ?? \"\").trim();\nif (!/^\\d{10,15}$/.test(number)) {\n  throw new Error(\"PAUSE_GUARD_INVALID_NUMBER\");\n}\nreturn [{ json: {\n  number,\n  payload: $input.first().json\n} }];"
-        }
-      },
-      {
-        "parameters": {
-          "url": "={{ 'https://qudpndluldjudukelwxd.supabase.co/rest/v1/whatsapp_order_sessions?customer_number=eq.' + encodeURIComponent($('Preservar envio - status').first().json.number) + '&select=customer_number,human_takeover,automation_paused_until&limit=1' }}",
-          "sendHeaders": true,
-          "headerParameters": {
-            "parameters": [
-              {
-                "name": "Accept-Encoding",
-                "value": "identity"
-              }
-            ]
-          },
-          "options": {
-            "response": {
-              "response": {
-                "responseFormat": "json"
-              }
-            },
-            "timeout": 15000
-          },
-          "authentication": "predefinedCredentialType",
-          "nodeCredentialType": "supabaseApi"
-        },
-        "id": "257c780e-ea50-4bf3-9dc5-f220df51caa1",
-        "name": "Reconsultar pausa - status",
-        "type": "n8n-nodes-base.httpRequest",
-        "typeVersion": 4.2,
-        "position": [
-          73304,
-          14944
-        ],
-        "alwaysOutputData": true,
-        "credentials": {
-          "supabaseApi": {
-            "id": "xGRPmZIvPbSqU30E",
-            "name": "Supabase Miranda Express"
-          }
-        },
-        "disabled": false,
-        "continueOnFail": false,
-        "onError": "stopWorkflow",
-        "retryOnFail": false
-      },
-      {
-        "id": "f8a4a8c7-2592-4bfc-af2f-e184eea193ca",
-        "name": "Bloquear envio pausado - status",
-        "type": "n8n-nodes-base.code",
-        "typeVersion": 2,
-        "position": [
-          73524,
-          14944
-        ],
-        "parameters": {
-          "jsCode": "const preserved =\n  $(\"Preservar envio - status\")\n    .first()\n    .json;\n\nconst payload =\n  preserved.payload;\n\nif (\n  !payload ||\n  typeof payload !== \"object\"\n) {\n  throw new Error(\n    \"PAUSE_GUARD_STATUS_PAYLOAD_MISSING\"\n  );\n}\n\nconst expectedNumber = String(\n  payload.number ??\n  preserved.number ??\n  \"\"\n).replace(/\\D/g, \"\");\n\nif (!expectedNumber) {\n  throw new Error(\n    \"PAUSE_GUARD_CUSTOMER_NUMBER_MISSING\"\n  );\n}\n\nconst receivedRows = $input\n  .all()\n  .map(item => item.json)\n  .filter(row =>\n    row &&\n    typeof row === \"object\" &&\n    Object.keys(row).length > 0\n  );\n\n// Pedido criado pelo site ou painel pode não possuir\n// sessão anterior. A notificação transacional é permitida.\nif (receivedRows.length === 0) {\n  return [{\n    json: payload\n  }];\n}\n\nconst matchingSession =\n  receivedRows.find(\n    row =>\n      String(\n        row.customer_number ?? \"\"\n      ).replace(/\\D/g, \"\") ===\n        expectedNumber\n  );\n\nif (!matchingSession) {\n  throw new Error(\n    \"PAUSE_GUARD_CUSTOMER_MISMATCH\"\n  );\n}\n\nconst humanTakeover =\n  matchingSession.human_takeover === true ||\n  String(\n    matchingSession.human_takeover ?? \"\"\n  ).toLowerCase() === \"true\";\n\nconst pausedUntilRaw =\n  matchingSession.automation_paused_until;\n\nlet temporaryPauseActive = false;\n\nif (pausedUntilRaw) {\n  const pausedUntil =\n    new Date(pausedUntilRaw);\n\n  if (\n    Number.isNaN(\n      pausedUntil.getTime()\n    )\n  ) {\n    throw new Error(\n      \"PAUSE_GUARD_INVALID_PAUSE_DATE\"\n    );\n  }\n\n  temporaryPauseActive =\n    pausedUntil.getTime() >\n    Date.now();\n}\n\nif (\n  humanTakeover ||\n  temporaryPauseActive\n) {\n  return [];\n}\n\nreturn [{\n  json: payload\n}];"
-        }
-      },
-      {
         "id": "9ae4936f-2e3e-4ff8-97cf-f7f0ee4ce0c1",
         "name": "Extrair ID do status automático",
         "type": "n8n-nodes-base.code",
@@ -3399,7 +3330,7 @@
         "main": [
           [
             {
-              "node": "Preservar envio - status",
+              "node": "Enviar Status WhatsApp",
               "type": "main",
               "index": 0
             }
@@ -3641,39 +3572,6 @@
           [
             {
               "node": "Enviar Imagem Produto",
-              "type": "main",
-              "index": 0
-            }
-          ]
-        ]
-      },
-      "Preservar envio - status": {
-        "main": [
-          [
-            {
-              "node": "Reconsultar pausa - status",
-              "type": "main",
-              "index": 0
-            }
-          ]
-        ]
-      },
-      "Reconsultar pausa - status": {
-        "main": [
-          [
-            {
-              "node": "Bloquear envio pausado - status",
-              "type": "main",
-              "index": 0
-            }
-          ]
-        ]
-      },
-      "Bloquear envio pausado - status": {
-        "main": [
-          [
-            {
-              "node": "Enviar Status WhatsApp",
               "type": "main",
               "index": 0
             }
