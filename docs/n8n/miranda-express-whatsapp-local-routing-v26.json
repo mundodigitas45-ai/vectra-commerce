@@ -952,7 +952,7 @@
             "conditions": [
               {
                 "id": "60ce39bd-e636-4b8f-bf18-24664d06a239",
-                "leftValue": "={{ $('Extrair Mensagem').first().json.isManualHumanMessage }}",
+                "leftValue": "={{ $('Extrair Mensagem').first().json.fromMe === true }}",
                 "rightValue": true,
                 "operator": {
                   "type": "boolean",
@@ -2913,7 +2913,7 @@
         "main": [
           [
             {
-              "node": "Pausar automação da conversa",
+              "node": "Buscar ID de mensagem do robô",
               "type": "main",
               "index": 0
             }
@@ -2941,7 +2941,13 @@
       "É resposta enviada pelo robô?": {
         "main": [
           [],
-          []
+          [
+            {
+              "node": "Pausar automação da conversa",
+              "type": "main",
+              "index": 0
+            }
+          ]
         ]
       },
       "Automação está pausada?": {
