@@ -1,0 +1,691 @@
+[
+  {
+    "updatedAt": "2026-08-31T02:47:01.000Z",
+    "createdAt": "2026-08-29T10:07:51.866Z",
+    "id": "VcCreativeImgV1",
+    "name": "Vectra Commerce - Central de Criativos Imagens V3 - Identity Lock",
+    "description": null,
+    "active": false,
+    "isArchived": false,
+    "nodes": [
+      {
+        "parameters": {},
+        "id": "376f13d2-a92a-4008-84a1-de69bf538469",
+        "name": "Teste Manual",
+        "type": "n8n-nodes-base.manualTrigger",
+        "typeVersion": 1,
+        "position": [
+          -1000,
+          180
+        ]
+      },
+      {
+        "parameters": {
+          "rule": {
+            "interval": [
+              {
+                "field": "minutes",
+                "minutesInterval": 1
+              }
+            ]
+          }
+        },
+        "id": "0e423610-7bbc-45d4-9ed2-946354b5840a",
+        "name": "Executar a Cada Minuto",
+        "type": "n8n-nodes-base.scheduleTrigger",
+        "typeVersion": 1.2,
+        "position": [
+          -1000,
+          -20
+        ],
+        "disabled": false
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "https://api.vectradev.shop/api/v1/internal/creative-image-jobs/claim",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "name": "x-creative-worker-secret",
+                "value": "={{$env.CREATIVE_WORKER_SECRET}}"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{JSON.stringify({worker_id:\"n8n-central-criativos-imagens-identity-lock-v3\",lease_seconds:1800})}}",
+          "options": {
+            "response": {
+              "response": {
+                "responseFormat": "json"
+              }
+            },
+            "timeout": 30000
+          }
+        },
+        "id": "bab3c7d2-9726-4c2f-8ad0-15894bf274a7",
+        "name": "API - Reservar Job de Imagem",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          -760,
+          80
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "const envelope = $json;\n\nif (!envelope || envelope.success !== true) {\n  throw new Error(\n    'A API não confirmou a reserva do job visual.'\n  );\n}\n\nif (envelope.empty || !envelope.data) {\n  return [];\n}\n\nconst data = envelope.data;\n\nif (\n  !data.job?.id ||\n  !data.channel?.id ||\n  !data.format?.key ||\n  !data.approved_copy?.content\n) {\n  throw new Error(\n    'O job visual reservado está incompleto.'\n  );\n}\n\nreturn [{ json: data }];"
+        },
+        "id": "6c50ef46-bfca-421e-b46b-ae7054a7df6a",
+        "name": "Validar Job de Imagem",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          -520,
+          80
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "const data = $json;\nconst format = data.format || {};\nconst product = data.product || {};\n\nconst sizes = {\n  square: '1024x1024',\n  feed_portrait: '1024x1536',\n  story: '1024x1536',\n  landscape: '1536x1024'\n};\n\nconst formatNames = {\n  square: 'quadrado',\n  feed_portrait: 'vertical para feed',\n  story: 'vertical para Stories ou Reels',\n  landscape: 'horizontal'\n};\n\nconst media = Array.isArray(data.product_media)\n  ? data.product_media\n  : [];\n\nconst officialMedia = media\n  .filter(item =>\n    /^https:\\/\\/.+/i.test(\n      String(item.public_url || '').trim()\n    )\n  )\n  .sort((left, right) =>\n    Number(Boolean(right.is_primary)) -\n    Number(Boolean(left.is_primary))\n  );\n\nconst primaryReference = officialMedia[0];\n\nif (!primaryReference) {\n  throw new Error(\n    'CREATIVE_IMAGE_REAL_REFERENCE_REQUIRED: ' +\n    'cadastre uma foto real oficial do produto.'\n  );\n}\n\nconst referenceUrl = String(\n  primaryReference.public_url\n).trim();\n\nconst prompt = [\n  'Crie somente um fundo publicitário premium para comércio eletrônico.',\n  'Não desenhe, recrie, represente ou insira nenhum produto.',\n  'Não insira embalagem, cabo, carregador, fone, acessório ou objeto comercial.',\n  'Não insira logotipo, marca, letras, números, preço, selo, CTA ou texto.',\n  'Não use pessoas, mãos ou elementos que ocupem a área central.',\n  'Mantenha a região central livre para receber posteriormente a fotografia real do produto.',\n  'Reserve áreas limpas no topo e na parte inferior para a composição comercial.',\n  'Use fundo elegante preto e grafite com iluminação dourada discreta.',\n  'Visual premium, realista, limpo, profissional e com alto contraste.',\n  'Evite excesso de brilho, raios, partículas, molduras e poluição visual.',\n  'Formato: ' +\n    (formatNames[format.key] || format.key) +\n    '.',\n  'Dimensão final esperada: ' +\n    format.width + 'x' + format.height + '.',\n  'Entregue exclusivamente o fundo sem produto e sem texto.'\n].join('\\n');\n\nreturn [{\n  json: {\n    ...data,\n    worker_id:\n      'n8n-central-criativos-imagens-identity-lock-v3',\n    visual_mode:\n      'background_only_identity_lock',\n    composition_mode:\n      'identity_lock_v3',\n    pipeline_version:\n      'identity-lock-v3',\n    image_prompt:\n      prompt,\n    reference_image_url:\n      referenceUrl,\n    reference_urls: [\n      referenceUrl\n    ],\n    reference_inventory: [{\n      order: 1,\n      role:\n        'official_product_identity',\n      url:\n        referenceUrl,\n      alt_text:\n        String(\n          primaryReference.alt_text || ''\n        ).trim() || null,\n      is_primary:\n        Boolean(\n          primaryReference.is_primary\n        ),\n      product_id:\n        product.id ||\n        data.campaign?.product_id ||\n        null\n    }],\n    openai_request: {\n      model: 'gpt-5.4',\n      input: [{\n        role: 'user',\n        content: [{\n          type: 'input_text',\n          text: prompt\n        }]\n      }],\n      tools: [{\n        type: 'image_generation',\n        quality: 'high',\n        size:\n          sizes[format.key] ||\n          '1024x1024'\n      }]\n    }\n  }\n}];"
+        },
+        "id": "48d63972-3795-4af3-aedb-fbfbd48f8404",
+        "name": "Preparar Criativo Visual",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          -280,
+          80
+        ]
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "https://api.openai.com/v1/responses",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "openAiApi",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{JSON.stringify($json.openai_request)}}",
+          "options": {
+            "response": {
+              "response": {
+                "responseFormat": "json"
+              }
+            },
+            "timeout": 600000
+          }
+        },
+        "id": "18a22e69-a137-4cfc-a758-f54d1315ec6c",
+        "name": "OpenAI - Gerar Imagem Tentativa 1",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          -20,
+          80
+        ],
+        "credentials": {
+          "openAiApi": {
+            "id": "6YAdIl0TV2nxtvl5",
+            "name": "OpenAi account"
+          }
+        },
+        "onError": "continueErrorOutput"
+      },
+      {
+        "parameters": {
+          "jsCode": "const source =\n  $('Preparar Criativo Visual').first().json;\n\nconst response = $json;\n\nconst calls = Array.isArray(response.output)\n  ? response.output.filter(\n      item =>\n        item &&\n        item.type === 'image_generation_call' &&\n        typeof item.result === 'string'\n    )\n  : [];\n\nif (!calls.length) {\n  const message =\n    response.error?.message ||\n    response.output_text ||\n    'A OpenAI não retornou o fundo visual.';\n\n  throw new Error(message);\n}\n\nconst imageBase64 = calls[0].result;\n\nif (imageBase64.length < 100) {\n  throw new Error(\n    'O fundo retornado está vazio ou inválido.'\n  );\n}\n\nif (!source.reference_image_url) {\n  throw new Error(\n    'CREATIVE_IMAGE_REAL_REFERENCE_REQUIRED: ' +\n    'a foto oficial não foi preservada.'\n  );\n}\n\nif (\n  source.composition_mode !==\n  'identity_lock_v3'\n) {\n  throw new Error(\n    'CREATIVE_IMAGE_COMPOSITION_MODE_INVALID'\n  );\n}\n\nreturn [{\n  json: {\n    job_id:\n      source.job.id,\n    worker_id:\n      source.worker_id,\n    channel_id:\n      source.channel.id,\n    format_key:\n      source.format.key,\n    image_base64:\n      imageBase64,\n    reference_image_url:\n      source.reference_image_url,\n    composition_mode:\n      source.composition_mode,\n    prompt:\n      source.image_prompt,\n    content: {\n      headline:\n        source.approved_copy?.content\n          ?.headline || null,\n      primary_text:\n        source.approved_copy?.content\n          ?.primary_text || null,\n      description:\n        source.approved_copy?.content\n          ?.description || null,\n      cta:\n        source.approved_copy?.content\n          ?.cta ||\n        'PEÇA PELO WHATSAPP'\n    },\n    metadata: {\n      generator:\n        'openai-responses-image-generation',\n      pipeline:\n        'identity-lock-v3',\n      visual_mode:\n        source.visual_mode,\n      composition_mode:\n        source.composition_mode,\n      generated_asset_role:\n        'background_only',\n      product_redrawn_by_ai:\n        false,\n      real_product_composition:\n        'deterministic_api_compositor',\n      generation_response_id:\n        response.id || null,\n      generation_response_model:\n        response.model || 'gpt-5.4',\n      generation_usage:\n        response.usage || null,\n      reference_image_url:\n        source.reference_image_url,\n      reference_inventory:\n        source.reference_inventory,\n      requested_width:\n        source.format.width,\n      requested_height:\n        source.format.height\n    },\n    output: {\n      openai_response_id:\n        response.id || null,\n      generated_asset_role:\n        'background_only',\n      composed_with_real_product:\n        true,\n      generated_at:\n        new Date().toISOString()\n    }\n  }\n}];"
+        },
+        "id": "a55cc6b8-5188-412b-9563-ab8fd61e8417",
+        "name": "Validar Imagem Gerada",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1660,
+          80
+        ],
+        "onError": "continueErrorOutput"
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "=https://api.vectradev.shop/api/v1/internal/creative-image-jobs/{{$json.job_id}}/complete",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "name": "x-creative-worker-secret",
+                "value": "={{$env.CREATIVE_WORKER_SECRET}}"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{JSON.stringify({worker_id:$json.worker_id,channel_id:$json.channel_id,format_key:$json.format_key,image_base64:$json.image_base64,reference_image_url:$json.reference_image_url,composition_mode:$json.composition_mode,prompt:$json.prompt,content:$json.content,metadata:$json.metadata,output:$json.output})}}",
+          "options": {
+            "response": {
+              "response": {
+                "responseFormat": "json"
+              }
+            },
+            "timeout": 30000
+          }
+        },
+        "id": "93589a59-151b-4128-9b5b-e64d8c81cc8d",
+        "name": "API - Concluir Imagem",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          2380,
+          80
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "let source = {};\n\ntry {\n  source =\n    $('Preparar Criativo Visual').first().json;\n} catch {}\n\nconst incoming = $json || {};\n\nconst error =\n  incoming.error ||\n  incoming.cause ||\n  incoming;\n\nconst message = String(\n  error.message ||\n  error.description ||\n  error.error?.message ||\n  'Falha não identificada na geração do fundo visual.'\n).slice(0, 2000);\n\nif (!source.job?.id) {\n  throw new Error(\n    'Não foi possível identificar o job visual com falha: ' +\n    message\n  );\n}\n\nconst isRateLimited =\n  /too many requests|rate limit|http 429/i.test(\n    message\n  );\n\nreturn [{\n  json: {\n    job_id:\n      source.job.id,\n    worker_id:\n      source.worker_id ||\n      'n8n-central-criativos-imagens-identity-lock-v3',\n    error_code:\n      isRateLimited\n        ? 'OPENAI_IMAGE_RATE_LIMITED'\n        : 'OPENAI_BACKGROUND_GENERATION_FAILED',\n    error_message:\n      message,\n    output: {\n      failed_at:\n        new Date().toISOString(),\n      format_key:\n        source.format?.key || null,\n      visual_mode:\n        source.visual_mode || null,\n      composition_mode:\n        source.composition_mode || null,\n      pipeline:\n        'identity-lock-v3',\n      details:\n        message\n    }\n  }\n}];"
+        },
+        "id": "59d6b925-1ba0-436f-9b55-786570c84456",
+        "name": "Preparar Falha de Imagem",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1900,
+          360
+        ]
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "=https://api.vectradev.shop/api/v1/internal/creative-image-jobs/{{$json.job_id}}/fail",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "name": "x-creative-worker-secret",
+                "value": "={{$env.CREATIVE_WORKER_SECRET}}"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{JSON.stringify({worker_id:$json.worker_id,error_code:$json.error_code,error_message:$json.error_message,output:$json.output})}}",
+          "options": {
+            "response": {
+              "response": {
+                "responseFormat": "json"
+              }
+            },
+            "timeout": 30000
+          }
+        },
+        "id": "4b0c0b95-bdcd-4103-93c5-d49a20889f83",
+        "name": "API - Registrar Falha de Imagem",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          2140,
+          360
+        ]
+      },
+      {
+        "parameters": {
+          "httpMethod": "POST",
+          "path": "central-criativos-imagens-51da05ae5bae5cd3a9e25e36237ec91a",
+          "responseMode": "onReceived",
+          "options": {}
+        },
+        "id": "18e8b27b-61e1-41ab-a1c6-943e8b9355c7",
+        "name": "Webhook Secreto de Teste",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 2,
+        "position": [
+          -1000,
+          380
+        ],
+        "webhookId": "c07ae6d1-b700-49e4-ae97-a5e5891aa504"
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "https://api.openai.com/v1/responses",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "openAiApi",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{JSON.stringify($json.openai_request)}}",
+          "options": {
+            "response": {
+              "response": {
+                "responseFormat": "json"
+              }
+            },
+            "timeout": 600000
+          }
+        },
+        "id": "b83a45fe-8daf-4be5-9353-c021e97f7102",
+        "name": "OpenAI - Gerar Imagem Tentativa 2",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          460,
+          80
+        ],
+        "credentials": {
+          "openAiApi": {
+            "id": "6YAdIl0TV2nxtvl5",
+            "name": "OpenAi account"
+          }
+        },
+        "onError": "continueErrorOutput"
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "https://api.openai.com/v1/responses",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "openAiApi",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{JSON.stringify($json.openai_request)}}",
+          "options": {
+            "response": {
+              "response": {
+                "responseFormat": "json"
+              }
+            },
+            "timeout": 600000
+          }
+        },
+        "id": "9db1e94b-a9dd-453d-8156-ad9a52ad1103",
+        "name": "OpenAI - Gerar Imagem Tentativa 3",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          940,
+          80
+        ],
+        "credentials": {
+          "openAiApi": {
+            "id": "6YAdIl0TV2nxtvl5",
+            "name": "OpenAi account"
+          }
+        },
+        "onError": "continueErrorOutput"
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "https://api.openai.com/v1/responses",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "openAiApi",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{JSON.stringify($json.openai_request)}}",
+          "options": {
+            "response": {
+              "response": {
+                "responseFormat": "json"
+              }
+            },
+            "timeout": 600000
+          }
+        },
+        "id": "7ea32618-6bb2-4cb0-a897-833668e67104",
+        "name": "OpenAI - Gerar Imagem Tentativa 4",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          1420,
+          80
+        ],
+        "credentials": {
+          "openAiApi": {
+            "id": "6YAdIl0TV2nxtvl5",
+            "name": "OpenAi account"
+          }
+        },
+        "onError": "continueErrorOutput"
+      },
+      {
+        "parameters": {
+          "resume": "timeInterval",
+          "amount": 30,
+          "unit": "seconds"
+        },
+        "id": "11d29368-ebd5-4828-b7b4-b95fb78c1030",
+        "name": "Aguardar 30s após limite",
+        "type": "n8n-nodes-base.wait",
+        "typeVersion": 1.1,
+        "position": [
+          220,
+          200
+        ],
+        "webhookId": "11d29368-ebd5-4828-b7b4-b95fb78c1030"
+      },
+      {
+        "parameters": {
+          "resume": "timeInterval",
+          "amount": 60,
+          "unit": "seconds"
+        },
+        "id": "eecab8d4-0c9a-42a7-b81c-309592567060",
+        "name": "Aguardar 60s após limite",
+        "type": "n8n-nodes-base.wait",
+        "typeVersion": 1.1,
+        "position": [
+          700,
+          200
+        ],
+        "webhookId": "eecab8d4-0c9a-42a7-b81c-309592567060"
+      },
+      {
+        "parameters": {
+          "resume": "timeInterval",
+          "amount": 120,
+          "unit": "seconds"
+        },
+        "id": "12e30bba-c239-43b9-bc00-425885457120",
+        "name": "Aguardar 120s após limite",
+        "type": "n8n-nodes-base.wait",
+        "typeVersion": 1.1,
+        "position": [
+          1180,
+          200
+        ],
+        "webhookId": "12e30bba-c239-43b9-bc00-425885457120"
+      }
+    ],
+    "connections": {
+      "Teste Manual": {
+        "main": [
+          [
+            {
+              "node": "API - Reservar Job de Imagem",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Executar a Cada Minuto": {
+        "main": [
+          [
+            {
+              "node": "API - Reservar Job de Imagem",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "API - Reservar Job de Imagem": {
+        "main": [
+          [
+            {
+              "node": "Validar Job de Imagem",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Validar Job de Imagem": {
+        "main": [
+          [
+            {
+              "node": "Preparar Criativo Visual",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Preparar Criativo Visual": {
+        "main": [
+          [
+            {
+              "node": "OpenAI - Gerar Imagem Tentativa 1",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Validar Imagem Gerada": {
+        "main": [
+          [
+            {
+              "node": "API - Concluir Imagem",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Preparar Falha de Imagem",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Preparar Falha de Imagem": {
+        "main": [
+          [
+            {
+              "node": "API - Registrar Falha de Imagem",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Webhook Secreto de Teste": {
+        "main": [
+          [
+            {
+              "node": "API - Reservar Job de Imagem",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "OpenAI - Gerar Imagem Tentativa 1": {
+        "main": [
+          [
+            {
+              "node": "Validar Imagem Gerada",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Aguardar 30s após limite",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Aguardar 30s após limite": {
+        "main": [
+          [
+            {
+              "node": "OpenAI - Gerar Imagem Tentativa 2",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "OpenAI - Gerar Imagem Tentativa 2": {
+        "main": [
+          [
+            {
+              "node": "Validar Imagem Gerada",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Aguardar 60s após limite",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Aguardar 60s após limite": {
+        "main": [
+          [
+            {
+              "node": "OpenAI - Gerar Imagem Tentativa 3",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "OpenAI - Gerar Imagem Tentativa 3": {
+        "main": [
+          [
+            {
+              "node": "Validar Imagem Gerada",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Aguardar 120s após limite",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Aguardar 120s após limite": {
+        "main": [
+          [
+            {
+              "node": "OpenAI - Gerar Imagem Tentativa 4",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "OpenAI - Gerar Imagem Tentativa 4": {
+        "main": [
+          [
+            {
+              "node": "Validar Imagem Gerada",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Preparar Falha de Imagem",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "settings": {
+      "executionOrder": "v1",
+      "saveManualExecutions": true,
+      "timezone": "America/Belem"
+    },
+    "staticData": {
+      "node:Executar a Cada Minuto": {
+        "recurrenceRules": []
+      }
+    },
+    "meta": null,
+    "pinData": {},
+    "versionId": "3e7a8245-7c05-47ae-9d98-30b1a9aab827",
+    "activeVersionId": null,
+    "versionCounter": 47,
+    "triggerCount": 2,
+    "tags": [],
+    "shared": [
+      {
+        "updatedAt": "2026-08-29T10:07:51.870Z",
+        "createdAt": "2026-08-29T10:07:51.870Z",
+        "role": "workflow:owner",
+        "workflowId": "VcCreativeImgV1",
+        "projectId": "aDMHvq09zgAd6yCh",
+        "project": {
+          "updatedAt": "2026-03-05T00:58:00.390Z",
+          "createdAt": "2026-03-04T22:59:05.239Z",
+          "id": "aDMHvq09zgAd6yCh",
+          "name": "ANDERSON vectra  <cristec27@gmail.com>",
+          "type": "personal",
+          "icon": null,
+          "description": null,
+          "creatorId": "d97ee129-f45d-452a-b3c8-d9005f2145bf"
+        }
+      }
+    ],
+    "versionMetadata": {
+      "name": "Version 7b0f4c2e",
+      "description": ""
+    }
+  }
+]
