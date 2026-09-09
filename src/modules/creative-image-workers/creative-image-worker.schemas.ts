@@ -17,6 +17,10 @@ export const completeCreativeImageJobSchema = z.object({
   channel_id: z.string().uuid(),
   format_key: creativeImageFormatSchema,
   image_base64: z.string().min(100).max(25_000_000),
+  reference_image_url: z.string().url().max(2048),
+  composition_mode: z
+    .literal("identity_lock_v3")
+    .default("identity_lock_v3"),
   prompt: z.string().trim().min(2).max(32_000),
   content: z.record(z.unknown()).default({}),
   metadata: z.record(z.unknown()).default({}),

@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
-import sharp from "sharp";
 import { supabase } from "../../config/supabase";
+import { composeLockedCreative } from "./creative-image-compositor";
 import type {
   ClaimCreativeImageJobInput,
   CompleteCreativeImageJobInput,
@@ -282,31 +282,122 @@ export class CreativeImageWorkerRepository {
       );
     }
 
+    const { data: campaign, error: campaignError } =
+      await supabase
+        .from("creative_campaigns")
+        .select("id, company_id, product_id")
+        .eq("id", job.campaign_id)
+        .eq("company_id", job.company_id)
+        .maybeSingle();
+
+    if (campaignError) throw repositoryError(campaignError);
+
+    if (!campaign?.product_id) {
+      throw domainError(
+        "CREATIVE_PRODUCT_REQUIRED",
+        "A campanha precisa possuir um produto selecionado."
+      );
+    }
+
+    const [
+      productResult,
+      referenceResult,
+      brandResult
+    ] = await Promise.all([
+        supabase
+          .from("products")
+          .select("id, name, sale_price")
+          .eq("id", campaign.product_id)
+          .eq("company_id", job.company_id)
+          .eq("is_active", true)
+          .maybeSingle(),
+        supabase
+          .from("product_media")
+          .select("id, product_id, public_url")
+          .eq("company_id", job.company_id)
+          .eq("product_id", campaign.product_id)
+          .eq("public_url", input.reference_image_url)
+          .eq("media_type", "image")
+          .eq("is_active", true)
+          .maybeSingle(),
+        supabase
+          .from("creative_brand_profiles")
+          .select("logo_url")
+          .eq("company_id", job.company_id)
+          .maybeSingle()
+      ]);
+
+    if (productResult.error) {
+      throw repositoryError(productResult.error);
+    }
+
+    if (referenceResult.error) {
+      throw repositoryError(referenceResult.error);
+    }
+
+    if (brandResult.error) {
+      throw repositoryError(brandResult.error);
+    }
+
+    if (!productResult.data) {
+      throw domainError(
+        "CREATIVE_PRODUCT_NOT_FOUND",
+        "O produto da campanha não está disponível."
+      );
+    }
+
+    if (!referenceResult.data) {
+      throw domainError(
+        "CREATIVE_REFERENCE_PRODUCT_MISMATCH",
+        "A foto enviada não pertence ao produto da campanha."
+      );
+    }
+
     const target = imageTargets[input.format_key];
+
     const sourceBuffer = decodeImageBase64(
       input.image_base64
     );
 
+    const protectedContent = {
+      ...input.content,
+      product_name: productResult.data.name,
+      sale_price: productResult.data.sale_price,
+      logo_url: brandResult.data?.logo_url ?? null
+    };
+
     let outputBuffer: Buffer;
+    let compositionMetadata: {
+      referenceBytes: number;
+      referenceHasAlpha: boolean;
+      presentationMode:
+        | "transparent_product"
+        | "protected_photo_card";
+    };
 
     try {
-      outputBuffer = await sharp(sourceBuffer, {
-        failOn: "warning"
-      })
-        .rotate()
-        .resize(target.width, target.height, {
-          fit: "cover",
-          position: "centre"
-        })
-        .webp({
-          quality: 92,
-          effort: 5
-        })
-        .toBuffer();
+      const composed = await composeLockedCreative({
+        backgroundBuffer: sourceBuffer,
+        referenceImageUrl:
+          input.reference_image_url,
+        width: target.width,
+        height: target.height,
+        content: protectedContent
+      });
+
+      outputBuffer = composed.buffer;
+      compositionMetadata = {
+        referenceBytes:
+          composed.referenceBytes,
+        referenceHasAlpha:
+          composed.referenceHasAlpha,
+        presentationMode:
+          composed.presentationMode
+      };
     } catch {
       throw domainError(
         "CREATIVE_IMAGE_INVALID",
-        "A imagem recebida não pôde ser processada."
+        "O fundo ou a foto real do produto não pôde ser processado."
       );
     }
 
@@ -345,7 +436,7 @@ export class CreativeImageWorkerRepository {
           p_channel_id: input.channel_id,
           p_job_id: job.id,
           p_format_key: input.format_key,
-          p_content: input.content,
+          p_content: protectedContent,
           p_storage_bucket: "creative-assets",
           p_storage_path: storagePath,
           p_public_url: publicUrl,
@@ -355,8 +446,16 @@ export class CreativeImageWorkerRepository {
           p_prompt: input.prompt,
           p_metadata: {
             ...input.metadata,
-            source: "gpt-image-2",
+            source: "identity-lock-v3",
+            background_source: "gpt-image-2",
             original_bytes: sourceBuffer.length,
+            reference_bytes:
+              compositionMetadata.referenceBytes,
+            reference_has_alpha:
+              compositionMetadata.referenceHasAlpha,
+            presentation_mode:
+              compositionMetadata.presentationMode,
+            identity_locked: true,
             output_bytes: outputBuffer.length
           },
           p_created_by: job.created_by
@@ -382,7 +481,7 @@ export class CreativeImageWorkerRepository {
         .update({
           status: "completed",
           provider: "openai",
-          model: "gpt-image-2",
+          model: "identity-lock-v3",
           output: {
             ...input.output,
             asset,
