@@ -16,6 +16,10 @@ WORKDIR /app
 
 ENV NODE_ENV=production
 
+RUN apk add --no-cache \
+  fontconfig \
+  font-dejavu
+
 COPY package*.json ./
 RUN npm install --omit=dev && npm cache clean --force
 
