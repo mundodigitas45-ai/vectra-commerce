@@ -23,6 +23,8 @@ const imageTargets: Record<
   landscape: { width: 1200, height: 628 }
 };
 
+const MIRANDA_EXPRESS_COMPANY_ID = "e2e1f5bc-3f6c-4868-9d9c-5c8226df9b3d";
+
 function repositoryError(
   error: { message: string; code?: string }
 ): Error & { code?: string } {
@@ -144,6 +146,12 @@ export class CreativeImageWorkerRepository {
 
     const campaignBrief = recordValue(campaign.brief);
     const realPhotoMode = campaignBrief.fidelity_mode === "real_photo";
+    if (realPhotoMode && job.company_id !== MIRANDA_EXPRESS_COMPANY_ID) {
+      throw domainError(
+        "CREATIVE_REAL_PHOTO_BRAND_UNAVAILABLE",
+        "Este modelo comercial ainda não foi configurado para esta empresa."
+      );
+    }
     const selectedMediaId = stringValue(campaignBrief.real_photo_media_id);
     if (realPhotoMode && !selectedMediaId) {
       requireSelectedRealPhoto(null, selectedMediaId);
@@ -373,6 +381,12 @@ export class CreativeImageWorkerRepository {
 
     const brief = recordValue(campaign.brief);
     const realPhotoMode = brief.fidelity_mode === "real_photo";
+    if (realPhotoMode && job.company_id !== MIRANDA_EXPRESS_COMPANY_ID) {
+      throw domainError(
+        "CREATIVE_REAL_PHOTO_BRAND_UNAVAILABLE",
+        "Este modelo comercial ainda não foi configurado para esta empresa."
+      );
+    }
     if (realPhotoMode !== (input.composition_mode === "professional_real_photo_v1")) {
       throw domainError(
         "CREATIVE_COMPOSITION_MODE_MISMATCH",
