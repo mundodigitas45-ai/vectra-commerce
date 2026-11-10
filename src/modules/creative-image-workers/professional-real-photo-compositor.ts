@@ -114,14 +114,15 @@ export async function composeProfessionalRealPhoto(input: Input): Promise<{
   const logoLayer = await sharp(logo).resize(logoSize, logoSize, {
     fit: "contain"
   }).png().toBuffer();
-  const name = wrap(offer.productName.toUpperCase(), horizontal ? 19 : 22);
-  const titleFont = horizontal ? 38 : 49;
+  const name = wrap(offer.productName.toUpperCase(), horizontal ? 19 : 25,
+    horizontal ? 2 : 3);
+  const titleFont = horizontal ? 38 : name.length === 3 ? 35 : 45;
   const titleX = horizontal ? 50 : 65;
-  const titleY = horizontal ? 118 : 125;
+  const titleY = horizontal ? 118 : name.length === 3 ? 92 : 120;
   const title = name.map((line, index) =>
-    `<text x="${titleX}" y="${titleY + index * 58}" font-size="${titleFont}" font-weight="800" fill="#14241c">${escapeXml(line)}</text>`
+    `<text x="${titleX}" y="${titleY + index * (titleFont + 8)}" font-size="${titleFont}" font-weight="800" fill="#14241c">${escapeXml(line)}</text>`
   ).join("");
-  const kitY = titleY + name.length * 58 + (horizontal ? 12 : 9);
+  const kitY = titleY + name.length * (titleFont + 8) + (horizontal ? 12 : 9);
   const kitLines = wrap(offer.kit, horizontal ? 31 : 49);
   const kit = kitLines.map((line, index) =>
     `<text x="${titleX}" y="${kitY + index * 30}" font-size="${horizontal ? 19 : 23}" fill="#4c5e51">${escapeXml(line)}</text>`
