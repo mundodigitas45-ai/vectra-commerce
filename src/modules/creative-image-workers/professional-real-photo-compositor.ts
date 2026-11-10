@@ -114,7 +114,7 @@ export async function composeProfessionalRealPhoto(input: Input): Promise<{
   const logoLayer = await sharp(logo).resize(logoSize, logoSize, {
     fit: "contain"
   }).png().toBuffer();
-  const name = wrap(offer.productName.toUpperCase(), horizontal ? 19 : 28);
+  const name = wrap(offer.productName.toUpperCase(), horizontal ? 19 : 22);
   const titleFont = horizontal ? 38 : 49;
   const titleX = horizontal ? 50 : 65;
   const titleY = horizontal ? 118 : 125;
