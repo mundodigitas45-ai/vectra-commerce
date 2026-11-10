@@ -1,6 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { supabase } from "../../config/supabase";
 import { composeLockedCreative } from "./creative-image-compositor";
+import { requireSelectedRealPhoto } from "./real-photo-identity";
+import {
+  composeProfessionalRealPhoto,
+  type ConfirmedPhotoOffer
+} from "./professional-real-photo-compositor";
 import type {
   ClaimCreativeImageJobInput,
   CompleteCreativeImageJobInput,
@@ -137,10 +142,29 @@ export class CreativeImageWorkerRepository {
       );
     }
 
+    const campaignBrief = recordValue(campaign.brief);
+    const realPhotoMode = campaignBrief.fidelity_mode === "real_photo";
+    const selectedMediaId = stringValue(campaignBrief.real_photo_media_id);
+    if (realPhotoMode && !selectedMediaId) {
+      requireSelectedRealPhoto(null, selectedMediaId);
+    }
+
     let product = null;
     let productMedia: unknown[] = [];
 
     if (campaign.product_id) {
+      const mediaQuery = supabase
+        .from("product_media")
+        .select(
+          "id, media_type, mime_type, source, file_name, public_url, alt_text, is_primary, sort_order"
+        )
+        .eq("product_id", campaign.product_id)
+        .eq("company_id", campaign.company_id)
+        .eq("media_type", "image")
+        .eq("is_active", true)
+        .order("is_primary", { ascending: false })
+        .order("sort_order", { ascending: true });
+
       const [productResult, mediaResult] =
         await Promise.all([
           supabase
@@ -151,18 +175,9 @@ export class CreativeImageWorkerRepository {
             .eq("id", campaign.product_id)
             .eq("company_id", campaign.company_id)
             .maybeSingle(),
-          supabase
-            .from("product_media")
-            .select(
-              "id, media_type, mime_type, public_url, alt_text, is_primary, sort_order"
-            )
-            .eq("product_id", campaign.product_id)
-            .eq("company_id", campaign.company_id)
-            .eq("media_type", "image")
-            .eq("is_active", true)
-            .order("is_primary", { ascending: false })
-            .order("sort_order", { ascending: true })
-            .limit(5)
+          realPhotoMode
+            ? mediaQuery.eq("id", selectedMediaId!)
+            : mediaQuery.limit(5)
         ]);
 
       if (productResult.error) {
@@ -175,6 +190,9 @@ export class CreativeImageWorkerRepository {
 
       product = productResult.data;
       productMedia = mediaResult.data ?? [];
+      if (realPhotoMode) {
+        requireSelectedRealPhoto(productMedia[0] as { id: string; source?: string | null; file_name?: string | null; mime_type?: string | null } | undefined, selectedMediaId);
+      }
     }
 
     const [brandResult, copyResult] =
@@ -285,7 +303,7 @@ export class CreativeImageWorkerRepository {
     const { data: campaign, error: campaignError } =
       await supabase
         .from("creative_campaigns")
-        .select("id, company_id, product_id")
+        .select("id, company_id, product_id, brief")
         .eq("id", job.campaign_id)
         .eq("company_id", job.company_id)
         .maybeSingle();
@@ -313,7 +331,7 @@ export class CreativeImageWorkerRepository {
           .maybeSingle(),
         supabase
           .from("product_media")
-          .select("id, product_id, public_url")
+          .select("id, product_id, public_url, source, file_name, mime_type")
           .eq("company_id", job.company_id)
           .eq("product_id", campaign.product_id)
           .eq("public_url", input.reference_image_url)
@@ -353,11 +371,22 @@ export class CreativeImageWorkerRepository {
       );
     }
 
-    const target = imageTargets[input.format_key];
+    const brief = recordValue(campaign.brief);
+    const realPhotoMode = brief.fidelity_mode === "real_photo";
+    if (realPhotoMode !== (input.composition_mode === "professional_real_photo_v1")) {
+      throw domainError(
+        "CREATIVE_COMPOSITION_MODE_MISMATCH",
+        "O modo de composição não corresponde à campanha."
+      );
+    }
+    if (realPhotoMode) {
+      requireSelectedRealPhoto(
+        referenceResult.data,
+        stringValue(brief.real_photo_media_id)
+      );
+    }
 
-    const sourceBuffer = decodeImageBase64(
-      input.image_base64
-    );
+    const target = imageTargets[input.format_key];
 
     const protectedContent = {
       ...input.content,
@@ -367,33 +396,71 @@ export class CreativeImageWorkerRepository {
     };
 
     let outputBuffer: Buffer;
+    let originalBytes: number | null = null;
     let compositionMetadata: {
       referenceBytes: number;
       referenceHasAlpha: boolean;
       presentationMode:
         | "transparent_product"
-        | "protected_photo_card";
+        | "protected_photo_card"
+        | "professional_real_photo";
+      layout?: string;
     };
 
     try {
-      const composed = await composeLockedCreative({
-        backgroundBuffer: sourceBuffer,
-        referenceImageUrl:
-          input.reference_image_url,
-        width: target.width,
-        height: target.height,
-        content: protectedContent
-      });
-
-      outputBuffer = composed.buffer;
-      compositionMetadata = {
-        referenceBytes:
-          composed.referenceBytes,
-        referenceHasAlpha:
-          composed.referenceHasAlpha,
-        presentationMode:
-          composed.presentationMode
-      };
+      if (realPhotoMode) {
+        const selectedOffer = recordValue(brief.confirmed_offer);
+        const frame = recordValue(brief.photo_framing);
+        const price = Number(selectedOffer.price);
+        if (selectedOffer.productName !== productResult.data.name ||
+            !Number.isFinite(price) || price <= 0 ||
+            !brandResult.data?.logo_url) {
+          throw new Error("Oferta, preço ou logo não confirmados.");
+        }
+        const offer: ConfirmedPhotoOffer = {
+          productName: productResult.data.name,
+          kit: String(selectedOffer.kit ?? ""),
+          price,
+          delivery: selectedOffer.delivery === "free" ? "free" : "consult",
+          freeDeliveryRegion: String(selectedOffer.freeDeliveryRegion ?? "")
+        };
+        const composed = await composeProfessionalRealPhoto({
+          referenceImageUrl: input.reference_image_url,
+          logoUrl: brandResult.data.logo_url,
+          width: target.width,
+          height: target.height,
+          offer,
+          framing: { top: Number(frame.top), bottom: Number(frame.bottom) },
+          direction: brief.art_direction === "editorial" ||
+            brief.art_direction === "spotlight" ? brief.art_direction : "auto"
+        });
+        outputBuffer = composed.buffer;
+        compositionMetadata = {
+          referenceBytes: composed.referenceBytes,
+          referenceHasAlpha: false,
+          presentationMode: "professional_real_photo",
+          layout: composed.layout
+        };
+        protectedContent.sale_price = price;
+        protectedContent.confirmed_offer = offer;
+      } else {
+        if (!input.image_base64) throw new Error("Fundo visual ausente.");
+        const sourceBuffer = decodeImageBase64(input.image_base64);
+        originalBytes = sourceBuffer.length;
+        const composed = await composeLockedCreative({
+          backgroundBuffer: sourceBuffer,
+          referenceImageUrl: input.reference_image_url,
+          width: target.width,
+          height: target.height,
+          content: protectedContent
+        });
+        outputBuffer = composed.buffer;
+        compositionMetadata = {
+          referenceBytes: composed.referenceBytes,
+          referenceHasAlpha: composed.referenceHasAlpha,
+          presentationMode: composed.presentationMode
+        };
+      }
     } catch {
       throw domainError(
         "CREATIVE_IMAGE_INVALID",
@@ -446,15 +513,18 @@ export class CreativeImageWorkerRepository {
           p_prompt: input.prompt,
           p_metadata: {
             ...input.metadata,
-            source: "identity-lock-v3",
-            background_source: "gpt-image-2",
-            original_bytes: sourceBuffer.length,
+            source: realPhotoMode ? "professional-real-photo-v1" : "identity-lock-v3",
+            background_source: realPhotoMode ? "code" : "gpt-image-2",
+            original_bytes: originalBytes,
             reference_bytes:
               compositionMetadata.referenceBytes,
             reference_has_alpha:
               compositionMetadata.referenceHasAlpha,
             presentation_mode:
               compositionMetadata.presentationMode,
+            layout: compositionMetadata.layout ?? null,
+            selected_media_id: realPhotoMode ? brief.real_photo_media_id : null,
+            photo_framing: realPhotoMode ? brief.photo_framing : null,
             identity_locked: true,
             output_bytes: outputBuffer.length
           },
@@ -480,8 +550,8 @@ export class CreativeImageWorkerRepository {
         .from("creative_jobs")
         .update({
           status: "completed",
-          provider: "openai",
-          model: "identity-lock-v3",
+          provider: realPhotoMode ? "internal" : "openai",
+          model: realPhotoMode ? "professional-real-photo-v1" : "identity-lock-v3",
           output: {
             ...input.output,
             asset,
@@ -540,3 +610,4 @@ export class CreativeImageWorkerRepository {
 
 export const creativeImageWorkerRepository =
   new CreativeImageWorkerRepository();
+
