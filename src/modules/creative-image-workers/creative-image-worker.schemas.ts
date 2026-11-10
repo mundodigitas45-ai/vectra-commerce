@@ -16,10 +16,10 @@ export const completeCreativeImageJobSchema = z.object({
   worker_id: z.string().trim().min(3).max(120),
   channel_id: z.string().uuid(),
   format_key: creativeImageFormatSchema,
-  image_base64: z.string().min(100).max(25_000_000),
+  image_base64: z.string().min(100).max(25_000_000).optional(),
   reference_image_url: z.string().url().max(2048),
   composition_mode: z
-    .literal("identity_lock_v3")
+    .enum(["identity_lock_v3", "professional_real_photo_v1"])
     .default("identity_lock_v3"),
   prompt: z.string().trim().min(2).max(32_000),
   content: z.record(z.unknown()).default({}),
@@ -45,3 +45,4 @@ export type CompleteCreativeImageJobInput =
 
 export type FailCreativeImageJobInput =
   z.infer<typeof failCreativeImageJobSchema>;
+
