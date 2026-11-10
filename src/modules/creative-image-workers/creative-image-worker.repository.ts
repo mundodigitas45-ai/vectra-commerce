@@ -388,7 +388,7 @@ export class CreativeImageWorkerRepository {
 
     const target = imageTargets[input.format_key];
 
-    const protectedContent = {
+    const protectedContent: Record<string, unknown> = {
       ...input.content,
       product_name: productResult.data.name,
       sale_price: productResult.data.sale_price,
