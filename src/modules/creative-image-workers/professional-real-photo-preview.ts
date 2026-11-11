@@ -25,7 +25,7 @@ export const realPhotoPreviewSchema = z.object({
   }),
   direction: z.enum(["auto", "editorial", "spotlight"]),
   cutout_polygon: z.array(z.tuple([z.number().min(0).max(1), z.number().min(0).max(1)]))
-    .min(3).max(32)
+    .min(3).max(32).optional()
 }).refine(data => data.framing.top < data.framing.bottom &&
     (data.offer.delivery !== "free" || !!data.offer.freeDeliveryRegion.trim()), {
   message: "Confira enquadramento e região da entrega grátis."
