@@ -4,7 +4,8 @@ import { composeLockedCreative } from "./creative-image-compositor";
 import { requireSelectedRealPhoto } from "./real-photo-identity";
 import {
   composeProfessionalRealPhoto,
-  type ConfirmedPhotoOffer
+  type ConfirmedPhotoOffer,
+  type CreativeVisualPlan
 } from "./professional-real-photo-compositor";
 import type {
   ClaimCreativeImageJobInput,
@@ -438,12 +439,36 @@ export class CreativeImageWorkerRepository {
           delivery: selectedOffer.delivery === "free" ? "free" : "consult",
           freeDeliveryRegion: String(selectedOffer.freeDeliveryRegion ?? "")
         };
+        // O plano só determina posição e cores. Nome, preço e condições são
+        // sempre lidos do catálogo e da oferta aprovada, nunca da resposta da IA.
+        const plan = recordValue(input.metadata.visual_plan);
+        const allowedLayouts = ["hero_center", "hero_left", "hero_right"];
+        const allowedInk = ["dark", "light"];
+        const allowedAccent = ["yellow", "green"];
+        if (!input.image_base64 ||
+            !allowedLayouts.includes(String(plan.layout)) ||
+            !allowedInk.includes(String(plan.ink)) ||
+            !allowedAccent.includes(String(plan.accent))) {
+          throw new Error("Fundo e direção visual aprovados são obrigatórios.");
+        }
+        const visualPlan: CreativeVisualPlan = {
+          layout: plan.layout as CreativeVisualPlan["layout"],
+          ink: plan.ink as CreativeVisualPlan["ink"],
+          accent: plan.accent as CreativeVisualPlan["accent"]
+        };
+        const cutout = brief.cutout_polygon;
+        if (Array.isArray(cutout)) {
+          visualPlan.cutoutPolygon = cutout as [number, number][];
+        }
+        const generated = decodeImageBase64(input.image_base64);
         const composed = await composeProfessionalRealPhoto({
           referenceImageUrl: input.reference_image_url,
           logoUrl: brandResult.data.logo_url,
           width: target.width,
           height: target.height,
           offer,
+          backgroundBuffer: generated,
+          visualPlan,
           framing: { top: Number(frame.top), bottom: Number(frame.bottom) },
           direction: brief.art_direction === "editorial" ||
             brief.art_direction === "spotlight" ? brief.art_direction : "auto"
