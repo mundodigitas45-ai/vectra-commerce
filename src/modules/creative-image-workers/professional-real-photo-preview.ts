@@ -23,7 +23,9 @@ export const realPhotoPreviewSchema = z.object({
     top: z.number().min(0).max(0.4),
     bottom: z.number().min(0.6).max(1)
   }),
-  direction: z.enum(["auto", "editorial", "spotlight"])
+  direction: z.enum(["auto", "editorial", "spotlight"]),
+  cutout_polygon: z.array(z.tuple([z.number().min(0).max(1), z.number().min(0).max(1)]))
+    .min(3).max(32)
 }).refine(data => data.framing.top < data.framing.bottom &&
     (data.offer.delivery !== "free" || !!data.offer.freeDeliveryRegion.trim()), {
   message: "Confira enquadramento e região da entrega grátis."
@@ -91,7 +93,9 @@ export async function previewProfessionalRealPhoto(
       ...targets[input.format_key],
       offer: input.offer,
       framing: input.framing,
-      direction: input.direction
+      direction: input.direction,
+      visualPlan: { layout: "hero_center", ink: "dark", accent: "yellow",
+        cutoutPolygon: input.cutout_polygon }
     });
     return reply.send({
       success: true,
