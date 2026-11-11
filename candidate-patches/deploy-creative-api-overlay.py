@@ -66,7 +66,7 @@ def check_http(path, method="GET", timeout=35):
                 status = response.status
         except HTTPError as exc:
             status = exc.code
-        except (URLError, TimeoutError) as exc:
+        except (URLError, OSError) as exc:
             last = type(exc).__name__
             time.sleep(1)
             continue
