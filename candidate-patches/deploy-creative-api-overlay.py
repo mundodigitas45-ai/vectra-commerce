@@ -106,6 +106,8 @@ def validate_old(old):
 def ensure_image_matches_live():
     if not STAGE.is_dir():
         raise RuntimeError("Overlay verificado ausente.")
+    if b"creativeImageWorkerRoutes" not in (STAGE / "app.js").read_bytes():
+        raise RuntimeError("O app atual não registra as rotas do worker criativo.")
     candidate = inspect(IMAGE)
     if candidate["Id"] != EXPECTED_IMAGE_ID:
         raise RuntimeError("A tag candidata não aponta para o build verificado.")
