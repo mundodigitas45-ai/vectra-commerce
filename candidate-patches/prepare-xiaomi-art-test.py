@@ -61,6 +61,10 @@ candidate.pop("activeVersionId", None)
 candidate.pop("versionCounter", None)
 if any(node["type"] == "n8n-nodes-base.webhook" for node in nodes):
     raise SystemExit("PARADO: webhook em teste isolado.")
+http_nodes = [node for node in nodes if node["type"] == "n8n-nodes-base.httpRequest"]
+if len(http_nodes) != 2 or any(node.get("parameters", {}).get("url") !=
+                              "https://api.openai.com/v1/responses" for node in http_nodes):
+    raise SystemExit("PARADO: teste tem uma chamada HTTP inesperada.")
 if any("/api/v1/internal/" in json.dumps(node.get("parameters", {})) for node in nodes):
     raise SystemExit("PARADO: teste tentaria alterar API comercial.")
 output = Path(args.output)
