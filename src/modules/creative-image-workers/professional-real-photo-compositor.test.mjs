@@ -72,3 +72,39 @@ test("recusa mídia fora do storage oficial e entrega grátis sem região", asyn
     else process.env.SUPABASE_URL = previousUrl;
   }
 });
+
+test("usa cenário gerado e máscara sem redesenhar a foto original", async () => {
+  const photo = await sharp({create:{width:400,height:400,channels:3,background:'#ec2020'}}).png().toBuffer();
+  const logo = await sharp({create:{width:20,height:20,channels:4,background:'#ffffff'}}).png().toBuffer();
+  const background = await sharp({create:{width:1080,height:1080,channels:3,background:'#20bd28'}}).png().toBuffer();
+  const previousFetch = globalThis.fetch;
+  const previousUrl = process.env.SUPABASE_URL;
+  process.env.SUPABASE_URL = 'https://example.supabase.co';
+  globalThis.fetch = async url => new Response(String(url).endsWith('photo.png') ? photo : logo,
+    {headers:{'content-type':'image/png'}});
+  try {
+    const output = await composeProfessionalRealPhoto({
+      referenceImageUrl:'https://example.supabase.co/storage/v1/object/public/photos/photo.png',
+      logoUrl:'https://example.supabase.co/storage/v1/object/public/logos/logo.png',
+      width:1080,height:1080,
+      offer:{productName:'Produto confirmado',kit:'Fonte e cabo',price:49.9,delivery:'consult',freeDeliveryRegion:''},
+      framing:{top:0,bottom:1}, direction:'auto',backgroundBuffer:background,
+      visualPlan:{layout:'hero_center',ink:'dark',accent:'green',
+        cutoutPolygon:[[.25,.25],[.75,.25],[.75,.75],[.25,.75]]}
+    });
+    const pixel = async (x,y) => {
+      const {data} = await sharp(output.buffer).extract({left:x,top:y,width:1,height:1})
+        .removeAlpha().raw().toBuffer({resolveWithObject:true});
+      return [...data];
+    };
+    const outside = await pixel(120,450);
+    const inside = await pixel(540,510);
+    assert.ok(outside[1] > outside[0] * 2, `fundo esperado: ${outside}`);
+    assert.ok(inside[0] > inside[1] * 2, `fotografia original esperada: ${inside}`);
+    assert.match(output.layout,/hero_center/);
+  } finally {
+    globalThis.fetch=previousFetch;
+    if (previousUrl===undefined) delete process.env.SUPABASE_URL;
+    else process.env.SUPABASE_URL=previousUrl;
+  }
+});
