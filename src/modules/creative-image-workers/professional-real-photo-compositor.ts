@@ -8,6 +8,16 @@ export type ConfirmedPhotoOffer = {
   freeDeliveryRegion: string;
 };
 
+// A direção visual pode mudar a composição, nunca os fatos comerciais.
+export type CreativeVisualPlan = {
+  layout: "hero_center" | "hero_left" | "hero_right";
+  ink: "dark" | "light";
+  accent: "yellow" | "green";
+  // Coordenadas normalizadas na fotografia original. A máscara afeta somente
+  // o alfa; todos os pixels do produto vêm da foto, sem recriação por IA.
+  cutoutPolygon?: [number, number][];
+};
+
 type Input = {
   referenceImageUrl: string;
   logoUrl: string;
@@ -16,6 +26,8 @@ type Input = {
   offer: ConfirmedPhotoOffer;
   framing: { top: number; bottom: number };
   direction: "auto" | "editorial" | "spotlight";
+  backgroundBuffer?: Buffer;
+  visualPlan?: CreativeVisualPlan;
 };
 
 function escapeXml(value: string): string {
@@ -95,12 +107,36 @@ export async function composeProfessionalRealPhoto(input: Input): Promise<{
   const sourceH = image.height!;
   const top = Math.floor(sourceH * input.framing.top);
   const bottom = Math.floor(sourceH * input.framing.bottom);
-  const cropped = await sharp(oriented).extract({
+  let cropped = await sharp(oriented).extract({
     left: 0, top, width: sourceW, height: bottom - top
   }).png().toBuffer();
+  const polygon = input.visualPlan?.cutoutPolygon;
+  if (polygon) {
+    if (polygon.length < 3 || polygon.length > 32 ||
+        polygon.some(point => !Array.isArray(point) || point.length !== 2 ||
+          point.some(value => !Number.isFinite(value) || value < 0 || value > 1))) {
+      throw new Error("Máscara de recorte inválida.");
+    }
+    const points = polygon.map(([x, y]) =>
+      `${Math.round(x * sourceW)},${Math.round(y * sourceH - top)}`
+    ).join(" ");
+    const alpha = Buffer.from(`<svg width="${sourceW}" height="${bottom - top}">
+      <polygon points="${points}" fill="white"/>
+    </svg>`);
+    cropped = await sharp(cropped).ensureAlpha()
+      .composite([{ input: alpha, blend: "dest-in" }]).png().toBuffer();
+  }
   const horizontal = w > h;
   const tall = h >= 1900;
-  const box = horizontal
+  const plannedLayout = input.visualPlan?.layout ?? "hero_center";
+  if (!["hero_center", "hero_left", "hero_right"].includes(plannedLayout)) {
+    throw new Error("Direção visual inválida.");
+  }
+  const sideLayout = !horizontal && plannedLayout !== "hero_center" && !tall;
+  const box = sideLayout
+    ? { x: plannedLayout === "hero_left" ? 45 : 490,
+        y: h > w ? 325 : 285, w: 545, h: h > w ? 595 : 495 }
+    : horizontal
     ? { x: 625, y: 72, w: 515, h: h - 144 }
     : tall
       ? { x: 65, y: 350, w: 950, h: 1040 }
@@ -108,7 +144,7 @@ export async function composeProfessionalRealPhoto(input: Input): Promise<{
         ? { x: 65, y: 300, w: 950, h: 615 }
         : { x: 65, y: 260, w: 950, h: 510 };
   const photo = await sharp(cropped).resize(box.w, box.h, {
-    fit: "contain", background: "#ffffff"
+    fit: "contain", background: polygon ? "#00000000" : "#ffffff"
   }).png().toBuffer();
   const logoSize = horizontal ? 95 : 116;
   const logoLayer = await sharp(logo).resize(logoSize, logoSize, {
@@ -140,23 +176,42 @@ export async function composeProfessionalRealPhoto(input: Input): Promise<{
   const buttonY = h - (horizontal ? 88 : tall ? 145 : 94);
   const buttonW = horizontal ? 505 : w - 130;
   const background = input.direction === "spotlight" ? "#eef1e9" : "#f8f5ed";
+  let generatedBackground: Buffer | null = null;
+  if (input.backgroundBuffer) {
+    if (input.backgroundBuffer.length > 20_000_000) {
+      throw new Error("Fundo maior que 20 MB.");
+    }
+    const info = await sharp(input.backgroundBuffer, { failOn: "warning" }).metadata();
+    if (!info.width || !info.height || info.width * info.height > 25_000_000) {
+      throw new Error("Fundo visual inválido.");
+    }
+    generatedBackground = await sharp(input.backgroundBuffer).rotate()
+      .resize(w, h, { fit: "cover" }).png().toBuffer();
+  }
+  const ink = input.visualPlan?.ink === "light" ? "#ffffff" : "#14241c";
+  const secondaryInk = input.visualPlan?.ink === "light" ? "#f1f5f1" : "#415449";
+  const accent = input.visualPlan?.accent === "green" ? "#126443" : "#f5c844";
   const svg = Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}">
-    <rect width="${w}" height="${h}" fill="${background}"/>
-    <rect x="${titleX}" y="42" width="110" height="8" rx="4" fill="#f5c844"/>
-    <rect x="${box.x - 8}" y="${box.y - 8}" width="${box.w + 16}" height="${box.h + 16}" rx="22" fill="#fff"/>
+    <rect width="${w}" height="${h}" fill="${generatedBackground ? "transparent" : background}"/>
+    <rect x="${titleX}" y="42" width="110" height="8" rx="4" fill="${accent}"/>
+    ${polygon ? "" : `<rect x="${box.x - 8}" y="${box.y - 8}" width="${box.w + 16}" height="${box.h + 16}" rx="22" fill="#fff"/>`}
     <g font-family="DejaVu Sans, sans-serif">
-      ${title}${kit}
-      <text x="${infoX}" y="${priceY}" font-size="${horizontal ? 49 : 66}" font-weight="800" fill="#14241c">${escapeXml(price)}</text>
-      <text x="${infoX}" y="${deliveryY}" font-size="${horizontal ? 17 : 22}" fill="#415449">${escapeXml(delivery.slice(0, horizontal ? 52 : 65))}</text>
-      <text x="${infoX}" y="${payY}" font-size="${horizontal ? 18 : 23}" font-weight="700" fill="#20513a">Pague somente na entrega</text>
+      ${title.replaceAll('fill="#14241c"', `fill="${ink}"`)}${kit.replaceAll('fill="#4c5e51"', `fill="${secondaryInk}"`)}
+      <text x="${infoX}" y="${priceY}" font-size="${horizontal ? 49 : 66}" font-weight="800" fill="${ink}">${escapeXml(price)}</text>
+      <text x="${infoX}" y="${deliveryY}" font-size="${horizontal ? 17 : 22}" fill="${secondaryInk}">${escapeXml(delivery.slice(0, horizontal ? 52 : 65))}</text>
+      <text x="${infoX}" y="${payY}" font-size="${horizontal ? 18 : 23}" font-weight="700" fill="${secondaryInk}">Pague somente na entrega</text>
       <rect x="${infoX}" y="${buttonY}" width="${buttonW}" height="63" rx="18" fill="#126443"/>
       <text x="${infoX + 25}" y="${buttonY + 41}" font-size="${horizontal ? 22 : 27}" font-weight="800" fill="#fff">PEÇA PELO WHATSAPP</text>
     </g>
   </svg>`);
-  const buffer = await sharp(svg).composite([
+  const base = generatedBackground ?? await sharp({
+    create: { width: w, height: h, channels: 4, background }
+  }).png().toBuffer();
+  const buffer = await sharp(base).composite([
+    { input: svg, left: 0, top: 0 },
     { input: photo, left: box.x, top: box.y },
     { input: logoLayer, left: w - logoSize - 45, top: 32 }
   ]).webp({ quality: 92, effort: 5 }).toBuffer();
   return { buffer, referenceBytes: original.length,
-    layout: `${input.direction}-${horizontal ? "horizontal" : tall ? "story" : "feed"}` };
+    layout: `${plannedLayout}-${horizontal ? "horizontal" : tall ? "story" : "feed"}` };
 }
