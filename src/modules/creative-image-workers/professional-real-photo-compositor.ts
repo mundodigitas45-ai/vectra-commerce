@@ -188,21 +188,33 @@ export async function composeProfessionalRealPhoto(input: Input): Promise<{
     generatedBackground = await sharp(input.backgroundBuffer).rotate()
       .resize(w, h, { fit: "cover" }).png().toBuffer();
   }
-  // A direção da IA é uma sugestão. Fundo gerado pode ter claridade desigual;
-  // painéis de contraste garantem legibilidade independentemente da sugestão.
-  const ink = generatedBackground ? "#ffffff"
+  // A direção da IA é uma sugestão. Os textos comerciais têm tinta escura;
+  // caso o cenário gerado fique escuro, só a área de leitura ganha base clara.
+  const ink = generatedBackground ? "#14241c"
     : input.visualPlan?.ink === "light" ? "#ffffff" : "#14241c";
-  const secondaryInk = generatedBackground ? "#eff4f7"
+  const secondaryInk = generatedBackground ? "#415449"
     : input.visualPlan?.ink === "light" ? "#f1f5f1" : "#415449";
   const accent = generatedBackground ? "#f5c844"
     : input.visualPlan?.accent === "green" ? "#126443" : "#f5c844";
-  const contrastPanels = generatedBackground ? `
-    <rect x="${horizontal ? 28 : 38}" y="${horizontal ? 22 : 20}"
-      width="${horizontal ? 570 : w - 76}" height="${horizontal ? 235 : 244}"
-      rx="26" fill="#101b25" fill-opacity="0.87"/>
-    <rect x="${horizontal ? 28 : 38}" y="${horizontal ? 282 : tall ? 1420 : h > w ? 955 : 785}"
-      width="${horizontal ? 570 : w - 76}" height="${horizontal ? h - 300 : tall ? 375 : h > w ? 365 : 275}"
-      rx="26" fill="#101b25" fill-opacity="0.87"/>` : "";
+  const titlePanel = { x: horizontal ? 28 : 38, y: horizontal ? 22 : 20,
+    w: horizontal ? 570 : w - 76, h: horizontal ? 235 : 244 };
+  const infoPanel = { x: horizontal ? 28 : 38,
+    y: horizontal ? 282 : tall ? 1420 : h > w ? 955 : 785,
+    w: horizontal ? 570 : w - 76,
+    h: horizontal ? h - 300 : tall ? 375 : h > w ? 365 : 275 };
+  const darkFraction = async (panel: typeof titlePanel): Promise<number> => {
+    if (!generatedBackground) return 0;
+    const pixels = await sharp(generatedBackground).extract({
+      left: panel.x, top: panel.y, width: panel.w, height: panel.h
+    }).resize(32, 8).greyscale().raw().toBuffer();
+    return [...pixels].filter(value => value < 155).length / pixels.length;
+  };
+  const contrastPanels = (await Promise.all([titlePanel, infoPanel].map(async panel =>
+    (await darkFraction(panel)) > 0.08
+      ? `<rect x="${panel.x}" y="${panel.y}" width="${panel.w}" height="${panel.h}"
+          rx="26" fill="#faf7ef" fill-opacity="0.95"/>`
+      : ""
+  ))).join("");
   const svg = Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}">
     <rect width="${w}" height="${h}" fill="${generatedBackground ? "transparent" : background}"/>
     ${contrastPanels}
