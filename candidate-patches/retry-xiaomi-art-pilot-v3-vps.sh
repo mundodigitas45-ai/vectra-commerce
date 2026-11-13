@@ -6,7 +6,7 @@ api=/root/vectra-art-api.DlGnEF
 private=/root/vectra-art-n8n.mPj0LK
 database=/root/n8n/n8n_data/database.sqlite
 workflow_id=VcCreativeImgV12PilotXiaomiArtTestV3
-stage="$private/retry-v3"
+stage="$private/retry-v3b"
 container_file="/tmp/vectra-xiaomi-pilot-v3-$$.json"
 trap 'docker exec -u 0 n8n rm -f "$container_file" >/dev/null 2>&1 || true' EXIT
 
