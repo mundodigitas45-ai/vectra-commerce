@@ -109,10 +109,10 @@ test("usa cenário gerado e máscara sem redesenhar a foto original", async () =
   }
 });
 
-test("fundo gerado claro mantém título e preço legíveis mesmo quando plano pede tinta escura", async () => {
+test("fundo gerado escuro recebe base clara para título e preço", async () => {
   const photo = await sharp({create:{width:400,height:400,channels:3,background:'#dd3030'}}).png().toBuffer();
   const logo = await sharp({create:{width:20,height:20,channels:4,background:'#222222'}}).png().toBuffer();
-  const background = await sharp({create:{width:1080,height:1080,channels:3,background:'#ffffff'}}).png().toBuffer();
+  const background = await sharp({create:{width:1080,height:1080,channels:3,background:'#173047'}}).png().toBuffer();
   const oldFetch = globalThis.fetch;
   const oldUrl = process.env.SUPABASE_URL;
   process.env.SUPABASE_URL = 'https://example.supabase.co';
@@ -131,16 +131,16 @@ test("fundo gerado claro mantém título e preço legíveis mesmo quando plano p
     const region = async (left,top,width,height) => {
       const {data,info} = await sharp(out.buffer).extract({left,top,width,height})
         .removeAlpha().raw().toBuffer({resolveWithObject:true});
-      let whites=0;
+      let darks=0;
       for(let i=0;i<data.length;i+=info.channels)
-        if(data[i]>220&&data[i+1]>220&&data[i+2]>220) whites++;
-      return whites;
+        if(data[i]<95&&data[i+1]<95&&data[i+2]<95) darks++;
+      return darks;
     };
     const panel = await sharp(out.buffer).extract({left:48,top:50,width:1,height:1})
       .removeAlpha().raw().toBuffer();
-    assert.ok(panel[0]<70&&panel[1]<70&&panel[2]<70, `painel de alto contraste esperado: ${panel}`);
-    assert.ok((await region(65,83,700,120))>100, 'título em tinta clara esperado');
-    assert.ok((await region(65,796,550,95))>100, 'preço em tinta clara esperado');
+    assert.ok(panel[0]>200&&panel[1]>200&&panel[2]>200, `base clara esperada: ${panel}`);
+    assert.ok((await region(65,83,700,120))>100, 'título em tinta escura esperado');
+    assert.ok((await region(65,796,550,95))>100, 'preço em tinta escura esperado');
   } finally {
     globalThis.fetch=oldFetch;
     if(oldUrl===undefined) delete process.env.SUPABASE_URL;
