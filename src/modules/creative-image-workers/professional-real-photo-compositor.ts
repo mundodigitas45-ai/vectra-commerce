@@ -142,7 +142,7 @@ export async function composeProfessionalRealPhoto(input: Input): Promise<{
       ? { x: 65, y: 350, w: 950, h: 1040 }
       : h > w
         ? { x: 65, y: 300, w: 950, h: 615 }
-        : { x: 65, y: 260, w: 950, h: 510 };
+        : { x: 65, y: 245, w: 950, h: 575 };
   const photo = await sharp(cropped).resize(box.w, box.h, {
     fit: "contain", background: polygon ? "#00000000" : "#ffffff"
   }).png().toBuffer();
@@ -188,11 +188,24 @@ export async function composeProfessionalRealPhoto(input: Input): Promise<{
     generatedBackground = await sharp(input.backgroundBuffer).rotate()
       .resize(w, h, { fit: "cover" }).png().toBuffer();
   }
-  const ink = input.visualPlan?.ink === "light" ? "#ffffff" : "#14241c";
-  const secondaryInk = input.visualPlan?.ink === "light" ? "#f1f5f1" : "#415449";
-  const accent = input.visualPlan?.accent === "green" ? "#126443" : "#f5c844";
+  // A direção da IA é uma sugestão. Fundo gerado pode ter claridade desigual;
+  // painéis de contraste garantem legibilidade independentemente da sugestão.
+  const ink = generatedBackground ? "#ffffff"
+    : input.visualPlan?.ink === "light" ? "#ffffff" : "#14241c";
+  const secondaryInk = generatedBackground ? "#eff4f7"
+    : input.visualPlan?.ink === "light" ? "#f1f5f1" : "#415449";
+  const accent = generatedBackground ? "#f5c844"
+    : input.visualPlan?.accent === "green" ? "#126443" : "#f5c844";
+  const contrastPanels = generatedBackground ? `
+    <rect x="${horizontal ? 28 : 38}" y="${horizontal ? 22 : 20}"
+      width="${horizontal ? 570 : w - 76}" height="${horizontal ? 235 : 244}"
+      rx="26" fill="#101b25" fill-opacity="0.87"/>
+    <rect x="${horizontal ? 28 : 38}" y="${horizontal ? 282 : tall ? 1420 : h > w ? 955 : 785}"
+      width="${horizontal ? 570 : w - 76}" height="${horizontal ? h - 300 : tall ? 375 : h > w ? 365 : 275}"
+      rx="26" fill="#101b25" fill-opacity="0.87"/>` : "";
   const svg = Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}">
     <rect width="${w}" height="${h}" fill="${generatedBackground ? "transparent" : background}"/>
+    ${contrastPanels}
     <rect x="${titleX}" y="42" width="110" height="8" rx="4" fill="${accent}"/>
     ${polygon ? "" : `<rect x="${box.x - 8}" y="${box.y - 8}" width="${box.w + 16}" height="${box.h + 16}" rx="22" fill="#fff"/>`}
     <g font-family="DejaVu Sans, sans-serif">
