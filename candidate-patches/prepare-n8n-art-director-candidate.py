@@ -37,15 +37,22 @@ if prep_code.count(needle) != 1:
     raise SystemExit("PARADO: preparação do job mudou.")
 prep["parameters"]["jsCode"] = prep_code.replace(needle, """    visual_direction_request: {
       model: 'gpt-5-mini',
-      max_output_tokens: 450,
+      reasoning: { effort: 'low' },
+      max_output_tokens: 1200,
       input: [{ role: 'user', content: [
         { type: 'input_text', text: [
-          'Você dirige a arte de um anúncio profissional da Miranda Express.',
-          'Analise a fotografia real anexada. Planeje só fundo, contraste e posição.',
-          'A fotografia original será recortada e colocada por código; não redesenhe o produto.',
-          'Crie uma cena que combine com este produto, sem repetir um template preto e dourado.',
-          'Nunca sugira produto, acessórios, oferta, preço, texto, logo ou marca inexistentes.',
-          'Responda com layout, cor de texto, destaque e descrição curta do fundo sem objetos.',
+          'Você é diretor de arte de anúncios profissionais para a Miranda Express.',
+          'Analise a fotografia real do produto e planeje um fundo específico para essa foto.',
+          'Referência visual: estúdio claro em bege/cinza suave, superfície natural, luz discreta,',
+          'produto grande como protagonista, título preto forte, destaque amarelo para preço',
+          'e CTA verde. Adapte a composição ao produto e ao formato; evite um layout idêntico',
+          'em todos os anúncios. As camadas comerciais serão desenhadas depois por código.',
+          'Planeje apenas cenário, área livre para o recorte e contraste; NÃO desenhe o produto.',
+          'A foto original será recortada e composta depois. Não mude ângulo, portas, pinos,',
+          'cabo, embalagem, inscrições ou quantidade de acessórios por imaginação.',
+          'Referências de estilo orientam cor, iluminação e ritmo; nunca identidade ou oferta.',
+          'Nunca sugira letras, números, preço, logo, botão, marcas, selos nem outro produto no fundo.',
+          'Retorne layout, tinta, destaque e uma descrição concreta do cenário (25 a 800 caracteres).',
           'Produto confirmado: ' + String(product.name || '').slice(0, 180) + '.',
           'Formato: ' + String(format.key || '').slice(0, 40) + '.'
         ].join('\\n') },
@@ -97,17 +104,20 @@ try { plan = JSON.parse(text); } catch { throw new Error('Direção criativa inv
 if (!['hero_center', 'hero_left', 'hero_right'].includes(plan.layout) ||
     !['dark', 'light'].includes(plan.ink) ||
     !['yellow', 'green'].includes(plan.accent) ||
-    typeof plan.scene !== 'string' || plan.scene.length < 25 || plan.scene.length > 400) {
+    typeof plan.scene !== 'string' || plan.scene.length < 25 || plan.scene.length > 800) {
   throw new Error('Plano visual fora dos limites seguros.');
 }
 const size = { square: '1024x1024', feed_portrait: '1024x1536',
   story: '1024x1536', landscape: '1536x1024' }[source.format.key];
 if (!size) throw new Error('Formato inválido.');
 const prompt = [
-  'Crie um fundo fotográfico premium de publicidade, adaptado à foto do produto analisado.',
+  'Crie somente um cenário de estúdio fotográfico para um anúncio profissional.',
   'Direção artística: ' + plan.scene + '.',
-  'Composição: ' + plan.layout + '; espaço negativo para produto original e textos renderizados depois.',
-  'Somente cenário abstrato/arquitetônico e iluminação natural discreta; aparência crível e sofisticada.',
+  'Composição: ' + plan.layout + '; preserve espaço livre para a fotografia original do produto,',
+  'o título, a logo, o preço e o CTA que serão inseridos por código depois.',
+  'Paleta base clara: bege suave, cinza quente ou branco quebrado; superfície natural e sombras discretas.',
+  'Não repita um fundo genérico: adapte materiais, profundidade e luz à categoria da fotografia.',
+  'Resultado realista, limpo e sofisticado, com boa leitura para texto preto e preço amarelo.',
   'Não desenhe produto, carregador, cabo, embalagem, objeto comercial ou pessoa.',
   'Não desenhe letras, números, preço, selo, logotipo, botão, marca ou CTA.',
   'Evite brilhos agressivos, raios, molduras e clichês repetidos.',
