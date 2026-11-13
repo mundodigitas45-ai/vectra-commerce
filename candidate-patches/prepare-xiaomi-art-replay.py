@@ -53,7 +53,9 @@ direction = runs.get("OpenAI - Direção Criativa por Foto", [])
 if len(direction) != 1:
     raise SystemExit("PARADO: direção original não identificada unicamente.")
 branches = (direction[0].get("data") or {}).get("main", [])
-if len(branches) != 1 or len(branches[0]) != 1:
+if (not isinstance(branches, list) or not branches
+        or not isinstance(branches[0], list) or len(branches[0]) != 1
+        or any(branch for branch in branches[1:])):
     raise SystemExit("PARADO: saída da direção inesperada.")
 response = branches[0][0].get("json", {})
 if response.get("status") != "completed" or response.get("model") != "gpt-5-mini-2025-08-07":
